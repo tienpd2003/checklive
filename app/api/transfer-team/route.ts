@@ -58,11 +58,17 @@ async function getLatestTeamCredentials() {
 // Hàm tự động chuyển team sử dụng Puppeteer
 async function automateTeamTransfer(email: string, credentials: { account: string; password: string }) {
   const browser = await puppeteer.launch({
-    headless: false,
+    headless: process.env.NODE_ENV === 'production' ? true : false,
     defaultViewport: null,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--disable-gpu',
       '--disable-blink-features=AutomationControlled',
       '--disable-features=VizDisplayCompositor',
       '--incognito',
