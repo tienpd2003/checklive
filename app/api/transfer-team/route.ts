@@ -201,10 +201,10 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     try {
       const verificationInput = await page.waitForSelector('input[type="text"], input[placeholder*="code"]', { timeout: 5000 });
       if (verificationInput) {
-        console.log('⚠️ Verification code required! Attempting to get code from email...');
+        console.log('⚠️ Verification code required! Waiting 20 seconds for email to arrive...');
         
-        // Đợi 5 giây để email được gửi đến
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Đợi 10 giây để đảm bảo email được gửi đến
+        await new Promise(resolve => setTimeout(resolve, 10000));
         
         // Thử lấy mã xác thực từ email
         let verificationCode = null;
