@@ -146,30 +146,18 @@ export default function Home() {
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Logo and Title */}
-            <div className="flex items-center space-x-4">
+            {/* Title */}
+            <div className="flex items-center space-x-2">
               <div 
-                className="relative cursor-pointer" 
+                className={`flex items-center space-x-1 text-sm cursor-pointer transition-opacity hover:opacity-80 ${
+                  isDarkMode ? 'text-gray-300' : 'text-white/80'
+                }`}
                 onClick={() => window.location.href = '/'}
               >
-                <img 
-                  src="/logo-ngang.png" 
-                  alt="CheckLive Logo" 
-                  className="h-10 w-auto transition-opacity hover:opacity-80"
-                />
-              </div>
-              <div className="flex items-center space-x-2">
-                <div 
-                  className={`flex items-center space-x-1 text-sm cursor-pointer transition-opacity hover:opacity-80 ${
-                    isDarkMode ? 'text-gray-300' : 'text-white/80'
-                  }`}
-                  onClick={() => window.location.href = '/'}
-                >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  <span>{t.home}</span>
-                </div>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                <span>{t.home}</span>
               </div>
             </div>
 
@@ -349,18 +337,7 @@ export default function Home() {
                           <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{result.data.con}</p>
                           <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>TEAM:</p>
                           <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{result.data.team}</p>
-                          <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Account:</p>
-                          <div className="flex items-center space-x-2">
-                            <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{result.data.account}</p>
-                            <button
-                              onClick={() => copyToClipboard(result.data?.account || '')}
-                              className={`p-1 rounded hover:bg-opacity-20 ${
-                                isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'
-                              }`}
-                            >
-                              <ClipboardIcon className="h-4 w-4" />
-                            </button>
-                          </div>
+                          
                           <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Date Renew:</p>
                           <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{result.data.dateRenew}</p>
                         </div>
@@ -369,36 +346,11 @@ export default function Home() {
                       {result.status === 'die' && (
                         <>
                           <div className="grid grid-cols-2 gap-2 text-sm">
-                            <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Old Team:</p>
+                            <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Team:</p>
                             <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{result.data.oldTeam}</p>
                             <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>TTKH:</p>
                             <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{result.data.ttkh}</p>
-                            <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>New Team:</p>
-                            <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{result.data.newTeam}</p>
-                            <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>New Account:</p>
-                            <div className="flex items-center space-x-2">
-                              <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{result.data.newAccount}</p>
-                              <button
-                                onClick={() => copyToClipboard(result.data?.newAccount || '')}
-                                className={`p-1 rounded hover:bg-opacity-20 ${
-                                  isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'
-                                }`}
-                              >
-                                <ClipboardIcon className="h-4 w-4" />
-                              </button>
-                            </div>
-                            <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>New Password:</p>
-                            <div className="flex items-center space-x-2">
-                              <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{result.data.newPassword}</p>
-                              <button
-                                onClick={() => copyToClipboard(result.data?.newPassword || '')}
-                                className={`p-1 rounded hover:bg-opacity-20 ${
-                                  isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'
-                                }`}
-                              >
-                                <ClipboardIcon className="h-4 w-4" />
-                              </button>
-                            </div>
+                            
                           </div>
 
                           <div className="mt-6 space-y-4">

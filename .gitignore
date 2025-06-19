@@ -41,3 +41,8 @@ yarn-error.log*
 
 # Yarn Integrity file
 .yarn-integrity
+
+# Environment variables
+.env.development.local
+.env.test.local
+.env.production.local

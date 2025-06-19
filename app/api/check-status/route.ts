@@ -2,21 +2,26 @@ import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Cấu hình trực tiếp Google Sheets credentials
-const GOOGLE_SHEETS_CLIENT_EMAIL = 'checklive@thayfamily.iam.gserviceaccount.com';
-const GOOGLE_SHEETS_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC9oVUUyG9YBEYt\ntgt2oLEfrI69bGBOM7qc14pFeChaXtB6Oc/FrcqmXgty3NL0tpmKMy5dDWbFVWr7\nHkyA9oFxpGju8kldut70op1bvl724+wt585ERPbVvMQp99OnoGWa3QH8rTNI5L+A\nX0wAA+GcHoR57EZyc2Pj/awVBTre+2aM8+0iX1yPh7/3HVJEVcYYXxwweVDbFbWi\nkDYK34pVKX1DaEwSL+9kpaBJ7BVy2NkhGR5EhYDzYtUk5w2Mmu1bvCarhJPREs2A\nBB9aw2HIMfrpDFuka9uCq8HsRBWWOYs7GPlC11nUEJzQr3gXM04vi5j4Y9EninKt\nKu8DLG53AgMBAAECggEAJ2u6fC+OtgVtcWM+ztJo/+SnZ8l328n1KVXFcNuhx+ed\n/0q1XqraTeuPBbnSQP0Uvh4VrVJz4uH2821BCi40iqNbDRFhHxMR9lk3zTKuGzUW\njBR8VMTha11qii7y2Q4HEUKQfy6iUqz7AnzNF9O2uvW9JHtxyakjQuohM916d4//\n80VpHS2gMO9Gcl3JRd/NJ+bW7Iw8NMCAhuDba/Rhx7ibYiGNCKr4yvtUwQwlVhBW\n4l7dXPWp9m/hKhIqef90jFDOv8iTI0N6ZYDgkp25mzZmWReyapi5c1bq9Kd9Hm2q\nmCGdqUSXO83+v7iEjEUdqSLl/VAUrLtKbav869s8QQKBgQDnJumba3xKdgiQ9Iu7\n/LAv5rh5ASm9aj3TzMPPSoBTdUWmZhZSojunPbVME3XWJXq5Jt/KYslyqDyFog48\nG4oM7WZk//B7CWYdS0a2fCEvhs6y8v5hbSwYoJ2bOlXLKdHAr51q/J7hq9EXipGw\nXjU+XTg1AIKEisCqBjsOV+o2XQKBgQDSA8dX1DlBU/uDKPjKX4cqHgirigvqnAw+\n5Y5s0wQCySV43HnTXSnrcPhzjEeG9vnEOsE5gN6mfmAKxuFzj9iIa9RFV4+IP1uO\n0N0p+BH1Dm2fwmFXOP5x7tNoKzINlPC3WEsxeIlVbNjzzd8qZRS5azGVkiXPJxYD\naQih1j+C4wKBgQCcXVFXxp0cjb37uMGx2ByjOrL9gBDpRi4u0WyAFEi8rC8CgjqF\niaNK3c5/eQaUZ2QeTbLDaJIXUsEmMNrqRELdvdYvaocV4+TE2kAqf8u/J7U5jnEQ\nHNbgjf4vnIWe2lo+u02EqwEbbawS/bTSFthzqIG2MPMZj/cGzRI0ALq6LQKBgQC8\nyBbF9YguGC8LHKZfS/W1P2Atyp6hmvpLA5C+dASz+FoNxapg++r1sAw12dBmGtYz\ntVkBtrztzsXIijQY7CIJp1wdpPLp14IW49saodqKfRi/tjxH6nyWr8craUDKAqtL\nNDwLUT2qI3j114aWllxFvHzK5Z/FEW5xTFYtG+jlXwKBgGVOku5OqdezVdV+fFvz\nKjxplk4whdAp0+tP8wYXVuyupVMgGQc7D9fMoMfQSLLTjYceD8i9vOWRFFCicl2I\nbgcLYY9uJOwlYSgX2jgre6rMTjvpfhrnGa4G1ftlLX6aToV4Gc6K3QwEjReNhFDz\ng9PbaDCVawvPmq+dDD/GJS+8\n-----END PRIVATE KEY-----\n";
-const SHEET_ID = '1GOXHENfSgzu0qUzRSobcEValk1bOLKCWCTh_W-7K_KE';
+// Cấu hình Google OAuth2 credentials
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN;
+const SHEET_ID = '1nNfRFr83wepWMlgoBAasPVV5hCjR7w2ZaAU0bjWEEq4';
 
-// Khởi tạo Google Sheets API client
-const auth = new google.auth.GoogleAuth({
-  credentials: {
-    client_email: GOOGLE_SHEETS_CLIENT_EMAIL,
-    private_key: GOOGLE_SHEETS_PRIVATE_KEY,
-  },
-  scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+// Khởi tạo OAuth2 client
+const oauth2Client = new google.auth.OAuth2(
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  'http://localhost:3000/api/auth/callback'
+);
+
+oauth2Client.setCredentials({
+  refresh_token: GOOGLE_REFRESH_TOKEN
 });
 
-const sheets = google.sheets({ version: 'v4', auth });
+const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
+
+const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
 // Bước 1: Tìm TEAM của email trong sheet CANVAPRO
 async function findTeamForEmail(email: string) {
@@ -189,7 +194,7 @@ export async function POST(request: NextRequest) {
       
       return NextResponse.json({
         status: 'die',
-        message: 'Tài khoản đã die, đã chuyển sang team mới',
+        message: 'Die',
         data: {
           oldTeam: teamInfo.team,
           ttkh: teamInfo.ttkh,
@@ -206,5 +211,49 @@ export async function POST(request: NextRequest) {
       status: 'error',
       message: 'Có lỗi xảy ra, vui lòng thử lại sau'
     });
+  }
+}
+
+export async function GET() {
+  try {
+    // Test Gmail access by listing some recent messages
+    const response = await gmail.users.messages.list({
+      userId: 'me',
+      maxResults: 5
+    });
+
+    const messages = response.data.messages || [];
+    const messageDetails = [];
+
+    // Get details for each message
+    for (const message of messages) {
+      const details = await gmail.users.messages.get({
+        userId: 'me',
+        id: message.id!
+      });
+      
+      const headers = details.data.payload?.headers;
+      const subject = headers?.find(h => h.name === 'Subject')?.value;
+      const from = headers?.find(h => h.name === 'From')?.value;
+
+      messageDetails.push({
+        id: message.id,
+        subject,
+        from
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Successfully accessed Gmail',
+      recentEmails: messageDetails
+    });
+
+  } catch (error: any) {
+    console.error('Error accessing Gmail:', error);
+    return NextResponse.json({
+      success: false,
+      error: error.message
+    }, { status: 500 });
   }
 } 

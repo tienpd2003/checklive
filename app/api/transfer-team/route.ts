@@ -2,22 +2,26 @@ import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import puppeteer from 'puppeteer';
+import { getCanvaVerificationCode } from '@/app/utils/gmail';
 
-// Cấu hình Google Sheets credentials
-const GOOGLE_SHEETS_CLIENT_EMAIL = 'checklive@thayfamily.iam.gserviceaccount.com';
-const GOOGLE_SHEETS_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC9oVUUyG9YBEYt\ntgt2oLEfrI69bGBOM7qc14pFeChaXtB6Oc/FrcqmXgty3NL0tpmKMy5dDWbFVWr7\nHkyA9oFxpGju8kldut70op1bvl724+wt585ERPbVvMQp99OnoGWa3QH8rTNI5L+A\nX0wAA+GcHoR57EZyc2Pj/awVBTre+2aM8+0iX1yPh7/3HVJEVcYYXxwweVDbFbWi\nkDYK34pVKX1DaEwSL+9kpaBJ7BVy2NkhGR5EhYDzYtUk5w2Mmu1bvCarhJPREs2A\nBB9aw2HIMfrpDFuka9uCq8HsRBWWOYs7GPlC11nUEJzQr3gXM04vi5j4Y9EninKt\nKu8DLG53AgMBAAECggEAJ2u6fC+OtgVtcWM+ztJo/+SnZ8l328n1KVXFcNuhx+ed\n/0q1XqraTeuPBbnSQP0Uvh4VrVJz4uH2821BCi40iqNbDRFhHxMR9lk3zTKuGzUW\njBR8VMTha11qii7y2Q4HEUKQfy6iUqz7AnzNF9O2uvW9JHtxyakjQuohM916d4//\n80VpHS2gMO9Gcl3JRd/NJ+bW7Iw8NMCAhuDba/Rhx7ibYiGNCKr4yvtUwQwlVhBW\n4l7dXPWp9m/hKhIqef90jFDOv8iTI0N6ZYDgkp25mzZmWReyapi5c1bq9Kd9Hm2q\nmCGdqUSXO83+v7iEjEUdqSLl/VAUrLtKbav869s8QQKBgQDnJumba3xKdgiQ9Iu7\n/LAv5rh5ASm9aj3TzMPPSoBTdUWmZhZSojunPbVME3XWJXq5Jt/KYslyqDyFog48\nG4oM7WZk//B7CWYdS0a2fCEvhs6y8v5hbSwYoJ2bOlXLKdHAr51q/J7hq9EXipGw\nXjU+XTg1AIKEisCqBjsOV+o2XQKBgQDSA8dX1DlBU/uDKPjKX4cqHgirigvqnAw+\n5Y5s0wQCySV43HnTXSnrcPhzjEeG9vnEOsE5gN6mfmAKxuFzj9iIa9RFV4+IP1uO\n0N0p+BH1Dm2fwmFXOP5x7tNoKzINlPC3WEsxeIlVbNjzzd8qZRS5azGVkiXPJxYD\naQih1j+C4wKBgQCcXVFXxp0cjb37uMGx2ByjOrL9gBDpRi4u0WyAFEi8rC8CgjqF\niaNK3c5/eQaUZ2QeTbLDaJIXUsEmMNrqRELdvdYvaocV4+TE2kAqf8u/J7U5jnEQ\nHNbgjf4vnIWe2lo+u02EqwEbbawS/bTSFthzqIG2MPMZj/cGzRI0ALq6LQKBgQC8\nyBbF9YguGC8LHKZfS/W1P2Atyp6hmvpLA5C+dASz+FoNxapg++r1sAw12dBmGtYz\ntVkBtrztzsXIijQY7CIJp1wdpPLp14IW49saodqKfRi/tjxH6nyWr8craUDKAqtL\nNDwLUT2qI3j114aWllxFvHzK5Z/FEW5xTFYtG+jlXwKBgGVOku5OqdezVdV+fFvz\nKjxplk4whdAp0+tP8wYXVuyupVMgGQc7D9fMoMfQSLLTjYceD8i9vOWRFFCicl2I\nbgcLYY9uJOwlYSgX2jgre6rMTjvpfhrnGa4G1ftlLX6aToV4Gc6K3QwEjReNhFDz\ng9PbaDCVawvPmq+dDD/GJS+8\n-----END PRIVATE KEY-----\n";
-const SHEET_ID = '1GOXHENfSgzu0qUzRSobcEValk1bOLKCWCTh_W-7K_KE';
+// Cấu hình Google OAuth2 credentials
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN;
+const SHEET_ID = '1nNfRFr83wepWMlgoBAasPVV5hCjR7w2ZaAU0bjWEEq4';
 
-// Khởi tạo Google Sheets API client
-const auth = new google.auth.GoogleAuth({
-  credentials: {
-    client_email: GOOGLE_SHEETS_CLIENT_EMAIL,
-    private_key: GOOGLE_SHEETS_PRIVATE_KEY,
-  },
-  scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+// Khởi tạo OAuth2 client
+const oauth2Client = new google.auth.OAuth2(
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  'http://localhost:3000/api/auth/callback'
+);
+
+oauth2Client.setCredentials({
+  refresh_token: GOOGLE_REFRESH_TOKEN
 });
 
-const sheets = google.sheets({ version: 'v4', auth });
+const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
 
 // Lấy thông tin tài khoản mới nhất từ sheet ADMIN FAM CANVA
 async function getLatestTeamCredentials() {
@@ -160,14 +164,12 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       const pageContent = await page.content();
       if (pageContent.includes('technical issue')) {
         console.log('❌ Technical issue detected - Canva is blocking automation');
-        await page.screenshot({ path: 'technical-issue.png' });
         throw new Error('Canva detected automation. Please try manual login or use different approach.');
       }
       
       // Check for security block
       if (pageContent.includes('security reasons') || pageContent.includes('RRS‑') || pageContent.includes('different Wi-Fi')) {
         console.log('🚨 SECURITY BLOCK detected - Canva has blocked this IP/browser');
-        await page.screenshot({ path: 'security-block.png' });
         throw new Error('Canva security system blocked access. Please:\n1. Change IP/WiFi network\n2. Use different browser/device\n3. Wait 24-48 hours\n4. Consider manual team invitation');
       }
     }
@@ -197,14 +199,48 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     // Check for verification code
     let needsVerification = false;
     try {
-      await page.waitForSelector('input[type="text"], input[placeholder*="code"]', { timeout: 5000 });
-      console.log('⚠️ Verification code required! Please enter manually.');
-      await page.screenshot({ path: 'verification-required.png' });
-      
-      console.log('Waiting 60 seconds for manual verification...');
-      await new Promise(resolve => setTimeout(resolve, 30000));
-      needsVerification = true;
+      const verificationInput = await page.waitForSelector('input[type="text"], input[placeholder*="code"]', { timeout: 5000 });
+      if (verificationInput) {
+        console.log('⚠️ Verification code required! Attempting to get code from email...');
+        
+        // Đợi 5 giây để email được gửi đến
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        // Thử lấy mã xác thực từ email
+        let verificationCode = null;
+        for (let i = 0; i < 3; i++) { // Thử 3 lần
+          verificationCode = await getCanvaVerificationCode(credentials.account);
+          if (verificationCode) break;
+          await new Promise(resolve => setTimeout(resolve, 5000)); // Đợi 5 giây trước khi thử lại
+        }
+        
+        if (verificationCode) {
+          console.log('Found verification code:', verificationCode);
+          await verificationInput.type(verificationCode, { delay: 100 });
+          
+          // Click nút Submit/Continue
+          await page.evaluate(() => {
+            const buttons = Array.from(document.querySelectorAll('button'));
+            const submitButton = buttons.find(btn => 
+              btn.textContent?.includes('Submit') || 
+              btn.textContent?.includes('Continue') ||
+              btn.textContent?.includes('Verify')
+            );
+            if (submitButton) {
+              (submitButton as HTMLElement).click();
+            }
+          });
+          
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        } else {
+          console.log('❌ Could not get verification code from email');
+          throw new Error('Could not get verification code from email');
+        }
+      }
     } catch (error) {
+      if (error instanceof Error && error.message.includes('Could not get verification code')) {
+        throw error;
+      }
       console.log('No verification code required');
     }
     
