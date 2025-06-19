@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import puppeteer from 'puppeteer';
 import { getCanvaVerificationCode } from '@/app/utils/gmail';
+import { execSync } from 'child_process';
 
 // Cấu hình Google OAuth2 credentials
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -22,6 +23,23 @@ oauth2Client.setCredentials({
 });
 
 const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
+
+// Function to find Chrome executable
+function findChrome() {
+  if (process.env.NODE_ENV === 'development') {
+    return undefined; // Let Puppeteer use default
+  }
+  
+  // Production: Try to find Chrome in common locations
+  try {
+    const chromePath = execSync('which google-chrome || which chromium || which chromium-browser || find /opt/render/.cache/puppeteer -name "chrome" -type f 2>/dev/null | head -1', { encoding: 'utf-8' }).trim();
+    console.log('Found Chrome at:', chromePath);
+    return chromePath || undefined;
+  } catch (error) {
+    console.log('Could not find Chrome, using default');
+    return undefined;
+  }
+}
 
 // Lấy thông tin tài khoản mới nhất từ sheet ADMIN FAM CANVA
 async function getLatestTeamCredentials() {
@@ -60,6 +78,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   const browser = await puppeteer.launch({
     headless: process.env.NODE_ENV === 'production' ? true : false,
     defaultViewport: null,
+    executablePath: findChrome(),
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
