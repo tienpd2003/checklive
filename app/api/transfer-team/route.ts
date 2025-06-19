@@ -7,10 +7,8 @@ import { getCanvaVerificationCode } from '@/app/utils/gmail';
 // Cấu hình Google OAuth2 credentials
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN;
-const SHEET_ID = '1nNfRFr83wepWMlgoBAasPVV5hCjR7w2ZaAU0bjWEEq4';
+const SHEET_ID = process.env.SHEET_ID;
 
-// Khởi tạo OAuth2 client
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
@@ -18,16 +16,10 @@ const oauth2Client = new google.auth.OAuth2(
 );
 
 oauth2Client.setCredentials({
-  refresh_token: GOOGLE_REFRESH_TOKEN
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
 });
 
 const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
-
-// Function to find Chrome executable
-function findChrome() {
-  // Always return undefined to let Puppeteer use its bundled Chromium
-  return undefined;
-}
 
 // Lấy thông tin tài khoản mới nhất từ sheet ADMIN FAM CANVA
 async function getLatestTeamCredentials() {
@@ -66,7 +58,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   const browser = await puppeteer.launch({
     headless: process.env.NODE_ENV === 'production' ? true : false,
     defaultViewport: null,
-    executablePath: findChrome(),
+    executablePath: undefined,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
