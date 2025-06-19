@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import puppeteer from 'puppeteer';
 import { getCanvaVerificationCode } from '@/app/utils/gmail';
-import { execSync } from 'child_process';
 
 // Cấu hình Google OAuth2 credentials
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -26,28 +25,8 @@ const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
 
 // Function to find Chrome executable
 function findChrome() {
-  if (process.env.NODE_ENV === 'development') {
-    return undefined; // Let Puppeteer use default
-  }
-  
-  // Production: Try to find Chrome in Puppeteer cache
-  try {
-    const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
-    const chromePath = execSync(`find ${cacheDir} -name "chrome" -type f -executable 2>/dev/null | head -1`, { encoding: 'utf-8' }).trim();
-    
-    if (chromePath) {
-      console.log('Found Chrome at:', chromePath);
-      return chromePath;
-    } else {
-      console.log('Chrome not found in cache, trying system locations');
-      const systemChrome = execSync('which google-chrome || which chromium || which chromium-browser 2>/dev/null | head -1', { encoding: 'utf-8' }).trim();
-      console.log('System Chrome at:', systemChrome);
-      return systemChrome || undefined;
-    }
-  } catch (error) {
-    console.log('Could not find Chrome, using default:', error);
-    return undefined;
-  }
+  // Always return undefined to let Puppeteer use its bundled Chromium
+  return undefined;
 }
 
 // Lấy thông tin tài khoản mới nhất từ sheet ADMIN FAM CANVA
