@@ -89,15 +89,63 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
         console.log('Cache directory contents:');
         const files = fs.readdirSync(cacheDir, { recursive: true });
         console.log(files);
+        
+        // Try to find Chrome executable in cache
+        const chromeFiles = files.filter(file => 
+          typeof file === 'string' && file.includes('chrome') && !file.includes('.tar')
+        );
+        console.log('Chrome-related files:', chromeFiles);
+      } else {
+        console.log('Cache directory does not exist');
       }
     } catch (e) {
       console.log('Cannot read cache directory:', e);
     }
     
-    // Không set executablePath, để Puppeteer tự động detect
-    console.log('Letting Puppeteer auto-detect Chrome installation...');
+    // Try to find Chrome executable manually
+    const possiblePaths = [
+      '/opt/render/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium'
+    ];
     
-    // Chỉ thêm container-friendly args
+    let foundPath = null;
+    for (const pathPattern of possiblePaths) {
+      try {
+        if (pathPattern.includes('*')) {
+          // Handle glob pattern for cache directory
+          const baseDir = '/opt/render/.cache/puppeteer/chrome';
+          if (fs.existsSync(baseDir)) {
+            const subdirs = fs.readdirSync(baseDir);
+            for (const subdir of subdirs) {
+              const fullPath = `${baseDir}/${subdir}/chrome-linux64/chrome`;
+              if (fs.existsSync(fullPath)) {
+                foundPath = fullPath;
+                break;
+              }
+            }
+          }
+        } else {
+          if (fs.existsSync(pathPattern)) {
+            foundPath = pathPattern;
+          }
+        }
+        if (foundPath) break;
+      } catch (e) {
+        console.log(`Error checking path ${pathPattern}:`, e);
+      }
+    }
+    
+    if (foundPath) {
+      console.log('Found Chrome at:', foundPath);
+      launchOptions.executablePath = foundPath;
+    } else {
+      console.log('Chrome not found at any expected path, will try to let Puppeteer auto-detect...');
+    }
+    
+    // Thêm container-friendly args
     launchOptions.args.push(
       '--disable-extensions',
       '--disable-plugins', 
@@ -510,6 +558,17 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   }
 }
 
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json();
@@ -518,7 +577,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         status: 'error',
         message: 'Email is required'
-      });
+      }, { status: 400 });
     }
 
     // Lấy thông tin tài khoản mới nhất
@@ -527,7 +586,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         status: 'error',
         message: 'Không tìm thấy thông tin tài khoản mới'
-      });
+      }, { status: 404 });
     }
 
     // Thực hiện quá trình chuyển team
@@ -537,7 +596,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         status: 'error',
         message: 'Không thể tạo link mời'
-      });
+      }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -546,6 +605,11 @@ export async function POST(request: NextRequest) {
       data: {
         inviteLink
       }
+    }, { 
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+      }
     });
 
   } catch (error) {
@@ -553,6 +617,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       status: 'error',
       message: 'Có lỗi xảy ra trong quá trình chuyển team'
-    });
+    }, { status: 500 });
   }
 } 
