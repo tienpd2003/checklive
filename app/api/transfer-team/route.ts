@@ -62,6 +62,13 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   
   // Find Chrome executable with inline implementation
   console.log('🔍 Starting Chrome executable search...');
+  console.log('🔍 Environment check:');
+  console.log('  - NODE_ENV:', process.env.NODE_ENV);
+  console.log('  - RENDER:', process.env.RENDER);
+  console.log('  - PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH);
+  console.log('  - PUPPETEER_CACHE_DIR:', process.env.PUPPETEER_CACHE_DIR);
+  console.log('  - CHROME_BIN:', process.env.CHROME_BIN);
+  console.log('  - Current working directory:', process.cwd());
   
   let chromeExecutable: string | undefined = undefined;
   
@@ -132,20 +139,46 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     try {
       const fs = require('fs');
       const path = require('path');
+      
+      // Check if puppeteer base directory exists
+      const baseCacheDir = '/opt/render/.cache/puppeteer';
+      console.log('📁 Checking base cache dir:', baseCacheDir, '- exists:', fs.existsSync(baseCacheDir));
+      
+      if (fs.existsSync(baseCacheDir)) {
+        const baseContents = fs.readdirSync(baseCacheDir);
+        console.log('📁 Base cache contents:', baseContents);
+      }
+      
       const cacheDir = '/opt/render/.cache/puppeteer/chrome';
+      console.log('📁 Checking chrome cache dir:', cacheDir, '- exists:', fs.existsSync(cacheDir));
       
       if (fs.existsSync(cacheDir)) {
-        const versions = fs.readdirSync(cacheDir).filter((dir: string) => dir.startsWith('linux-'));
+        const allContents = fs.readdirSync(cacheDir);
+        console.log('📁 Chrome cache all contents:', allContents);
+        
+        const versions = allContents.filter((dir: string) => dir.startsWith('linux-'));
         console.log('📁 Found Chrome versions:', versions);
         
         for (const version of versions) {
-          const chromePath = path.join(cacheDir, version, 'chrome-linux64', 'chrome');
-          if (fs.existsSync(chromePath)) {
-            console.log('🎯 Last resort: found Chrome at', chromePath);
-            launchOptions.executablePath = chromePath;
-            break;
+          const versionDir = path.join(cacheDir, version);
+          console.log('📁 Checking version dir:', versionDir, '- exists:', fs.existsSync(versionDir));
+          
+          if (fs.existsSync(versionDir)) {
+            const versionContents = fs.readdirSync(versionDir);
+            console.log('📁 Version dir contents:', versionContents);
+            
+            const chromePath = path.join(versionDir, 'chrome-linux64', 'chrome');
+            console.log('📁 Checking final chrome path:', chromePath, '- exists:', fs.existsSync(chromePath));
+            
+            if (fs.existsSync(chromePath)) {
+              console.log('🎯 Last resort: found Chrome at', chromePath);
+              launchOptions.executablePath = chromePath;
+              break;
+            }
           }
         }
+      } else {
+        console.log('❌ Chrome cache directory does not exist');
       }
     } catch (error) {
       console.log('❌ Last resort detection failed:', error);
