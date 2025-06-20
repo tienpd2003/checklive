@@ -26,14 +26,22 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install all dependencies (including devDependencies for build)
+RUN npm ci && npm cache clean --force
 
 # Copy source code
 COPY . .
 
-# Build the application
-RUN npm run build
+# Build the application with debug info
+RUN echo "Starting Next.js build..." && \
+    npm run build && \
+    echo "Build completed successfully" && \
+    ls -la .next/ && \
+    echo "BUILD_ID content:" && \
+    cat .next/BUILD_ID 2>/dev/null || echo "BUILD_ID not found"
+
+# Remove devDependencies after build to reduce image size
+RUN npm prune --production
 
 # Expose port
 EXPOSE 3000
@@ -50,6 +58,10 @@ exec npm start' > /app/start.sh && chmod +x /app/start.sh
 # Set user to non-root for security
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
+
+# Change ownership of app directory to nextjs user
+RUN chown -R nextjs:nodejs /app
+
 USER nextjs
 
 # Start the application
