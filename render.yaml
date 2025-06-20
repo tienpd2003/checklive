@@ -4,7 +4,10 @@ services:
     env: node
     buildCommand: |
       npm install
+      echo "Installing Chrome for Puppeteer..."
       npx puppeteer browsers install chrome
+      echo "Checking installed Chrome..."
+      find /opt/render/.cache/puppeteer -name "chrome" -type f 2>/dev/null || echo "Chrome not found in cache"
       npm run build
     startCommand: npm start
     envVars:
@@ -12,6 +15,10 @@ services:
         value: production
       - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
         value: false
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/.cache/puppeteer
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: /opt/render/.cache/puppeteer/chrome/linux-137.0.7151.70/chrome-linux64/chrome
       - key: GOOGLE_REDIRECT_URI
         sync: false
       - key: GOOGLE_CLIENT_ID

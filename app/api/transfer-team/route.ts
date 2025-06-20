@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import puppeteer from 'puppeteer';
 import { getCanvaVerificationCode } from '@/app/utils/gmail';
+import fs from 'fs';
 
 // Cấu hình Google OAuth2 credentials
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -55,10 +56,12 @@ async function getLatestTeamCredentials() {
 
 // Hàm tự động chuyển team sử dụng Puppeteer
 async function automateTeamTransfer(email: string, credentials: { account: string; password: string }) {
-  const browser = await puppeteer.launch({
-    headless: process.env.NODE_ENV === 'production' ? true : false,
+  // Cấu hình cho production environment (Render.com)
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  let launchOptions: any = {
+    headless: isProduction ? 'new' : false,
     defaultViewport: null,
-    executablePath: undefined,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -73,7 +76,52 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       '--incognito',
       '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     ]
-  });
+  };
+
+  // Cấu hình executablePath cho production
+  if (isProduction) {
+    // Sử dụng environment variable hoặc path mặc định
+    const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/render/.cache/puppeteer/chrome/linux-137.0.7151.70/chrome-linux64/chrome';
+    
+    // Kiểm tra xem Chrome có tồn tại không
+    if (fs.existsSync(chromePath)) {
+      launchOptions.executablePath = chromePath;
+      console.log('Using Chrome at:', chromePath);
+    } else {
+      // Thử tìm Chrome ở các vị trí khác
+      const possiblePaths = [
+        '/opt/render/.cache/puppeteer/chrome/*/chrome-linux64/chrome',
+        '/opt/google/chrome/chrome',
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium'
+      ];
+      
+      let foundPath = null;
+      for (const path of possiblePaths) {
+        if (fs.existsSync(path)) {
+          foundPath = path;
+          break;
+        }
+      }
+      
+      if (foundPath) {
+        launchOptions.executablePath = foundPath;
+        console.log('Found Chrome at:', foundPath);
+      } else {
+        console.log('Chrome not found at any expected path, letting Puppeteer auto-detect');
+        // Thêm các args để hỗ trợ môi trường container
+        launchOptions.args.push('--disable-extensions');
+        launchOptions.args.push('--disable-plugins');
+        launchOptions.args.push('--disable-background-timer-throttling');
+        launchOptions.args.push('--disable-backgrounding-occluded-windows');
+        launchOptions.args.push('--disable-renderer-backgrounding');
+      }
+    }
+  }
+  
+  const browser = await puppeteer.launch(launchOptions);
 
   try {
     const page = await browser.newPage();
