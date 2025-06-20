@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import puppeteer from 'puppeteer';
 import { getCanvaVerificationCode } from '@/app/utils/gmail';
+import { findChromeExecutable, getChromeLaunchArgs } from '@/app/utils/chrome-finder';
 
 // Cấu hình Google OAuth2 credentials
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -59,30 +60,27 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   
   console.log('Launching browser for environment:', isProduction ? 'production' : 'development');
   
-  const browser = await puppeteer.launch({
+  // Find Chrome executable
+  const chromeExecutable = findChromeExecutable();
+  
+  // Configure browser launch options
+  const launchOptions: any = {
     headless: isProduction ? true : false,
     defaultViewport: null,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process',
-      '--disable-gpu',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-features=VizDisplayCompositor',
-      '--disable-extensions',
-      '--disable-plugins',
-      '--disable-background-timer-throttling',
-      '--disable-backgrounding-occluded-windows',
-      '--disable-renderer-backgrounding',
-      '--disable-ipc-flooding-protection',
-      '--incognito',
-      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ]
+    args: getChromeLaunchArgs()
+  };
+
+  // Set executable path if found
+  if (chromeExecutable) {
+    launchOptions.executablePath = chromeExecutable;
+  }
+  
+  console.log('Browser launch options:', { 
+    headless: launchOptions.headless, 
+    executablePath: launchOptions.executablePath || 'default' 
   });
+  
+  const browser = await puppeteer.launch(launchOptions);
 
   try {
     const page = await browser.newPage();

@@ -4,12 +4,16 @@ services:
     env: node
     buildCommand: |
       npm install
+      node scripts/install-chrome.js
       npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
-
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/.cache/puppeteer
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: true
 
       - key: GOOGLE_REDIRECT_URI
         sync: false
