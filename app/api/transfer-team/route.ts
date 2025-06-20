@@ -57,29 +57,20 @@ async function getLatestTeamCredentials() {
 
 // Hàm tự động chuyển team sử dụng Puppeteer
 async function automateTeamTransfer(email: string, credentials: { account: string; password: string }) {
-  let browser;
+  const browser = await puppeteer.launch({
+    headless: false,
+    defaultViewport: null,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-features=VizDisplayCompositor',
+      '--incognito',
+      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ]
+  });
+
   try {
-    console.log('Launching browser...');
-    
-    // Simple config that works well on Railway
-    const browserConfig: any = {
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
-      ]
-    };
-
-    // Railway handles Chrome installation automatically
-    browser = await puppeteer.launch(browserConfig);
-    console.log('Browser launched successfully');
-
     const page = await browser.newPage();
     
     // Basic stealth setup
@@ -213,7 +204,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
         console.log('⚠️ Verification code required! Attempting to get code from email...');
         
         // Đợi 5 giây để email được gửi đến
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise(resolve => setTimeout(resolve, 10000));
         
         // Thử lấy mã xác thực từ email
         let verificationCode = null;
@@ -474,7 +465,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
 
   } catch (error) {
     console.error('Automation error:', error);
-    await browser?.close();
+    await browser.close();
     throw error;
   }
 }
