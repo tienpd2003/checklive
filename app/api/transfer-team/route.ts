@@ -60,10 +60,50 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   
   console.log('Launching browser for environment:', isProduction ? 'production' : 'development');
   
-  // Find Chrome executable
+  // Find Chrome executable with inline implementation
   console.log('🔍 Starting Chrome executable search...');
-  const chromeExecutable = findChromeExecutable();
-  console.log('🔍 Chrome executable search result:', chromeExecutable);
+  
+  let chromeExecutable: string | undefined = undefined;
+  
+  // Direct paths that we know work from debug results
+  const directPaths = [
+    '/opt/render/.cache/puppeteer/chrome/linux-127.0.6533.88/chrome-linux64/chrome',
+    '/opt/render/.cache/puppeteer/chrome/linux-137.0.7151.70/chrome-linux64/chrome',
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    process.env.CHROME_BIN
+  ].filter(Boolean) as string[];
+  
+  console.log('🔍 Checking direct paths:', directPaths.length, 'paths');
+  
+  for (let i = 0; i < directPaths.length; i++) {
+    const path = directPaths[i];
+    console.log(`📍 Checking direct path ${i + 1}/${directPaths.length}:`, path);
+    
+    try {
+      const fs = require('fs');
+      if (fs.existsSync(path)) {
+        console.log('📍 Path exists, testing executable:', path);
+        
+        // Test if executable works
+        try {
+          const { execSync } = require('child_process');
+          execSync(`"${path}" --version`, { timeout: 5000, stdio: 'pipe' });
+          console.log('✅ Chrome executable is working at:', path);
+          chromeExecutable = path;
+          break;
+        } catch (testError) {
+          console.log('❌ Chrome executable test failed:', path, testError);
+          continue;
+        }
+      } else {
+        console.log('❌ Path does not exist:', path);
+      }
+    } catch (error) {
+      console.log('❌ Failed to check path:', path, error);
+    }
+  }
+  
+  console.log('🔍 Final Chrome executable result:', chromeExecutable);
   
   // Configure browser launch options
   const launchOptions: any = {
@@ -75,28 +115,9 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   // Set executable path if found
   if (chromeExecutable) {
     launchOptions.executablePath = chromeExecutable;
-    console.log('✅ Using found Chrome executable:', chromeExecutable);
+    console.log('✅ Using Chrome executable:', chromeExecutable);
   } else {
-    console.log('⚠️ No Chrome executable found, trying fallback methods...');
-    
-    // Fallback: Try direct paths that we know work from debug
-    const fallbackPaths = [
-      '/opt/render/.cache/puppeteer/chrome/linux-127.0.6533.88/chrome-linux64/chrome',
-      '/opt/render/.cache/puppeteer/chrome/linux-137.0.7151.70/chrome-linux64/chrome'
-    ];
-    
-    for (const fallbackPath of fallbackPaths) {
-      try {
-        const fs = require('fs');
-        if (fs.existsSync(fallbackPath)) {
-          console.log('✅ Found fallback Chrome at:', fallbackPath);
-          launchOptions.executablePath = fallbackPath;
-          break;
-        }
-      } catch (error) {
-        console.log('❌ Fallback path check failed:', fallbackPath, error);
-      }
-    }
+    console.log('❌ No Chrome executable found, will use default Puppeteer behavior');
   }
   
   console.log('🚀 Final browser launch options:', { 
@@ -104,6 +125,34 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     executablePath: launchOptions.executablePath || 'default',
     argsCount: launchOptions.args.length
   });
+  
+  // Last resort fallback: if no executable path found, try to find it dynamically
+  if (!launchOptions.executablePath) {
+    console.log('⚠️ Attempting last resort Chrome detection...');
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const cacheDir = '/opt/render/.cache/puppeteer/chrome';
+      
+      if (fs.existsSync(cacheDir)) {
+        const versions = fs.readdirSync(cacheDir).filter((dir: string) => dir.startsWith('linux-'));
+        console.log('📁 Found Chrome versions:', versions);
+        
+        for (const version of versions) {
+          const chromePath = path.join(cacheDir, version, 'chrome-linux64', 'chrome');
+          if (fs.existsSync(chromePath)) {
+            console.log('🎯 Last resort: found Chrome at', chromePath);
+            launchOptions.executablePath = chromePath;
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      console.log('❌ Last resort detection failed:', error);
+    }
+  }
+  
+  console.log('🚀 FINAL browser launch with executable:', launchOptions.executablePath || 'default');
   
   const browser = await puppeteer.launch(launchOptions);
 

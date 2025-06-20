@@ -14,6 +14,8 @@ services:
         value: /opt/render/.cache/puppeteer
       - key: PUPPETEER_SKIP_DOWNLOAD
         value: true
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: /opt/render/.cache/puppeteer/chrome/linux-127.0.6533.88/chrome-linux64/chrome
 
       - key: GOOGLE_REDIRECT_URI
         sync: false
