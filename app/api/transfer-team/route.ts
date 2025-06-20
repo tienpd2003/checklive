@@ -60,9 +60,12 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   let browser = null;
   
   try {
+    console.log('Launching browser with Railway-optimized config...');
     browser = await puppeteer.launch({
       headless: process.env.NODE_ENV === 'production' ? true : false,
       defaultViewport: null,
+      timeout: 60000,
+      protocolTimeout: 240000,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -70,21 +73,53 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        ...(process.env.NODE_ENV === 'production' ? ['--single-process'] : []),
         '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor,AudioServiceOutOfProcess',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-extensions',
+        '--disable-plugins',
+        '--disable-default-apps',
+        '--disable-hang-monitor',
+        '--disable-prompt-on-repost',
+        '--disable-sync',
+        '--disable-translate',
+        '--metrics-recording-only',
+        '--no-default-browser-check',
+        '--safebrowsing-disable-auto-update',
         '--disable-blink-features=AutomationControlled',
-        '--disable-features=VizDisplayCompositor',
-        '--incognito',
-        '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        '--memory-pressure-off',
+        '--max_old_space_size=4096',
+        ...(process.env.NODE_ENV === 'production' ? [
+          '--single-process',
+          '--max-old-space-size=2048'
+        ] : []),
+        '--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       ]
     });
 
-    // Kiểm tra browser có sẵn sàng không
-    if (!browser || !browser.isConnected()) {
-      throw new Error('Failed to launch browser or browser is not connected');
+    console.log('Browser launched successfully');
+
+    // Retry mechanism cho newPage
+    let page = null;
+    for (let i = 0; i < 3; i++) {
+      try {
+        console.log(`Creating new page, attempt ${i + 1}/3...`);
+        page = await browser.newPage();
+        console.log('Page created successfully');
+        break;
+      } catch (error) {
+        console.log(`Failed to create page, attempt ${i + 1}/3:`, error);
+        if (i === 2) throw error;
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     }
 
-    const page = await browser.newPage();
+    if (!page) {
+      throw new Error('Failed to create page after 3 attempts');
+    }
     
     // Basic stealth setup
     await page.evaluateOnNewDocument(() => {
@@ -94,7 +129,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       (window as any).chrome = { runtime: {} };
     });
     
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     
     console.log('Navigating to Canva login...');
     await page.goto('https://www.canva.com/login', { 
@@ -257,11 +292,6 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       console.log('No verification code required');
     }
     
-    // // Navigate to People page
-    // if (!needsVerification) {
-    //   await page.waitForNavigation({ timeout: 30000 });
-    // }
-    
     console.log('Navigating to People settings page...');
     await page.goto('https://www.canva.com/settings/people', { 
       waitUntil: 'networkidle2', 
@@ -384,7 +414,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
           // Find the main container div that contains both the text and buttons
           // Based on HTML structure, look for div with class "_2fpXnQ HbS2lw" or similar main container
           let mainContainer = null;
-                     let currentElement = inviteTextSpan as Element;
+          let currentElement = inviteTextSpan as Element;
           
           // Search up the DOM tree to find the main container div
           for (let i = 0; i < 15; i++) {
