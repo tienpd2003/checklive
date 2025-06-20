@@ -3,21 +3,22 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import puppeteer from 'puppeteer';
 import { getCanvaVerificationCode } from '@/app/utils/gmail';
-import { findChromeExecutable, getChromeLaunchArgs } from '@/app/utils/chrome-finder';
 
 // Cấu hình Google OAuth2 credentials
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const SHEET_ID = process.env.SHEET_ID;
+const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN;
+const SHEET_ID = '1nNfRFr83wepWMlgoBAasPVV5hCjR7w2ZaAU0bjWEEq4';
 
+// Khởi tạo OAuth2 client
 const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/auth/callback'
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  'http://localhost:3000/api/auth/callback'
 );
 
 oauth2Client.setCredentials({
-  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+  refresh_token: GOOGLE_REFRESH_TOKEN
 });
 
 const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
@@ -56,146 +57,18 @@ async function getLatestTeamCredentials() {
 
 // Hàm tự động chuyển team sử dụng Puppeteer
 async function automateTeamTransfer(email: string, credentials: { account: string; password: string }) {
-  const isProduction = process.env.NODE_ENV === 'production';
-  
-  console.log('Launching browser for environment:', isProduction ? 'production' : 'development');
-  
-  // HARDCODED CHROME PATH - Using working path from debug-chrome endpoint
-  console.log('🎯 Using hardcoded Chrome path from successful debug results...');
-  const WORKING_CHROME_PATH = '/opt/render/.cache/puppeteer/chrome/linux-127.0.6533.88/chrome-linux64/chrome';
-  
-  console.log('🔍 Environment check:');
-  console.log('  - NODE_ENV:', process.env.NODE_ENV);
-  console.log('  - RENDER:', process.env.RENDER);
-  console.log('  - PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH);
-  console.log('  - PUPPETEER_CACHE_DIR:', process.env.PUPPETEER_CACHE_DIR);
-  console.log('  - CHROME_BIN:', process.env.CHROME_BIN);
-  console.log('  - Current working directory:', process.cwd());
-  console.log('  - HARDCODED_CHROME_PATH:', WORKING_CHROME_PATH);
-  
-  let chromeExecutable: string | undefined = undefined;
-  
-  // First try the hardcoded path that we know works
-  try {
-    const fs = require('fs');
-    if (fs.existsSync(WORKING_CHROME_PATH)) {
-      console.log('✅ Hardcoded Chrome path exists:', WORKING_CHROME_PATH);
-      chromeExecutable = WORKING_CHROME_PATH;
-    } else {
-      console.log('❌ Hardcoded Chrome path does not exist, trying fallbacks...');
-    }
-  } catch (error) {
-    console.log('❌ Error checking hardcoded path:', error);
-  }
-  
-  // Fallback search if hardcoded path fails
-  if (!chromeExecutable) {
-    console.log('🔍 Fallback: searching for Chrome...');
-    const fallbackPaths = [
-      '/opt/render/.cache/puppeteer/chrome/linux-137.0.7151.70/chrome-linux64/chrome',
-      process.env.PUPPETEER_EXECUTABLE_PATH,
-      process.env.CHROME_BIN
-    ].filter(Boolean) as string[];
-  
-    console.log('🔍 Checking fallback paths:', fallbackPaths.length, 'paths');
-    
-    for (let i = 0; i < fallbackPaths.length; i++) {
-      const path = fallbackPaths[i];
-      console.log(`📍 Checking fallback path ${i + 1}/${fallbackPaths.length}:`, path);
-      
-      try {
-        const fs = require('fs');
-        if (fs.existsSync(path)) {
-          console.log('✅ Found working Chrome at:', path);
-          chromeExecutable = path;
-          break;
-        } else {
-          console.log('❌ Fallback path does not exist:', path);
-        }
-      } catch (error) {
-        console.log('❌ Failed to check fallback path:', path, error);
-      }
-    }
-  }
-  
-  console.log('🔍 Final Chrome executable result:', chromeExecutable);
-  
-  // Configure browser launch options
-  const launchOptions: any = {
-    headless: isProduction ? true : false,
+  const browser = await puppeteer.launch({
+    headless: false,
     defaultViewport: null,
-    args: getChromeLaunchArgs()
-  };
-
-  // Set executable path if found
-  if (chromeExecutable) {
-    launchOptions.executablePath = chromeExecutable;
-    console.log('✅ Using Chrome executable:', chromeExecutable);
-  } else {
-    console.log('❌ No Chrome executable found, will use default Puppeteer behavior');
-  }
-  
-  console.log('🚀 Final browser launch options:', { 
-    headless: launchOptions.headless, 
-    executablePath: launchOptions.executablePath || 'default',
-    argsCount: launchOptions.args.length
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-features=VizDisplayCompositor',
+      '--incognito',
+      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ]
   });
-  
-  // Last resort fallback: if no executable path found, try to find it dynamically
-  if (!launchOptions.executablePath) {
-    console.log('⚠️ Attempting last resort Chrome detection...');
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      
-      // Check if puppeteer base directory exists
-      const baseCacheDir = '/opt/render/.cache/puppeteer';
-      console.log('📁 Checking base cache dir:', baseCacheDir, '- exists:', fs.existsSync(baseCacheDir));
-      
-      if (fs.existsSync(baseCacheDir)) {
-        const baseContents = fs.readdirSync(baseCacheDir);
-        console.log('📁 Base cache contents:', baseContents);
-      }
-      
-      const cacheDir = '/opt/render/.cache/puppeteer/chrome';
-      console.log('📁 Checking chrome cache dir:', cacheDir, '- exists:', fs.existsSync(cacheDir));
-      
-      if (fs.existsSync(cacheDir)) {
-        const allContents = fs.readdirSync(cacheDir);
-        console.log('📁 Chrome cache all contents:', allContents);
-        
-        const versions = allContents.filter((dir: string) => dir.startsWith('linux-'));
-        console.log('📁 Found Chrome versions:', versions);
-        
-        for (const version of versions) {
-          const versionDir = path.join(cacheDir, version);
-          console.log('📁 Checking version dir:', versionDir, '- exists:', fs.existsSync(versionDir));
-          
-          if (fs.existsSync(versionDir)) {
-            const versionContents = fs.readdirSync(versionDir);
-            console.log('📁 Version dir contents:', versionContents);
-            
-            const chromePath = path.join(versionDir, 'chrome-linux64', 'chrome');
-            console.log('📁 Checking final chrome path:', chromePath, '- exists:', fs.existsSync(chromePath));
-            
-            if (fs.existsSync(chromePath)) {
-              console.log('🎯 Last resort: found Chrome at', chromePath);
-              launchOptions.executablePath = chromePath;
-              break;
-            }
-          }
-        }
-      } else {
-        console.log('❌ Chrome cache directory does not exist');
-      }
-    } catch (error) {
-      console.log('❌ Last resort detection failed:', error);
-    }
-  }
-  
-  console.log('🚀 FINAL browser launch with executable:', launchOptions.executablePath || 'default');
-  
-  const browser = await puppeteer.launch(launchOptions);
 
   try {
     const page = await browser.newPage();
@@ -328,10 +201,10 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     try {
       const verificationInput = await page.waitForSelector('input[type="text"], input[placeholder*="code"]', { timeout: 5000 });
       if (verificationInput) {
-        console.log('⚠️ Verification code required! Waiting 20 seconds for email to arrive...');
+        console.log('⚠️ Verification code required! Attempting to get code from email...');
         
-        // Đợi 10 giây để đảm bảo email được gửi đến
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        // Đợi 5 giây để email được gửi đến
+        await new Promise(resolve => setTimeout(resolve, 5000));
         
         // Thử lấy mã xác thực từ email
         let verificationCode = null;
@@ -597,17 +470,6 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   }
 }
 
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  });
-}
-
 export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json();
@@ -616,7 +478,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         status: 'error',
         message: 'Email is required'
-      }, { status: 400 });
+      });
     }
 
     // Lấy thông tin tài khoản mới nhất
@@ -625,7 +487,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         status: 'error',
         message: 'Không tìm thấy thông tin tài khoản mới'
-      }, { status: 404 });
+      });
     }
 
     // Thực hiện quá trình chuyển team
@@ -635,7 +497,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         status: 'error',
         message: 'Không thể tạo link mời'
-      }, { status: 500 });
+      });
     }
 
     return NextResponse.json({
@@ -644,11 +506,6 @@ export async function POST(request: NextRequest) {
       data: {
         inviteLink
       }
-    }, { 
-      status: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-      }
     });
 
   } catch (error) {
@@ -656,6 +513,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       status: 'error',
       message: 'Có lỗi xảy ra trong quá trình chuyển team'
-    }, { status: 500 });
+    });
   }
 } 

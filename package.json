@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test-build": "node scripts/test-build.js",
+    "check-env": "node scripts/check-env.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -16,9 +18,9 @@
     "autoprefixer": "^10.4.17",
     "axios": "^1.6.5",
     "googleapis": "^131.0.0",
-    "next": "^14.2.30",
+    "next": "14.1.0",
     "postcss": "^8.4.33",
-    "puppeteer": "^22.0.0",
+    "puppeteer": "^24.10.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwindcss": "^3.4.1",

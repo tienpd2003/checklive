@@ -10,9 +10,9 @@ const SHEET_ID = '1nNfRFr83wepWMlgoBAasPVV5hCjR7w2ZaAU0bjWEEq4';
 
 // Khởi tạo OAuth2 client
 const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/auth/callback'
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  'http://localhost:3000/api/auth/callback'
 );
 
 oauth2Client.setCredentials({
