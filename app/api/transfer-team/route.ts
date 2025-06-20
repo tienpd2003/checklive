@@ -57,28 +57,85 @@ async function getLatestTeamCredentials() {
 
 // Hàm tự động chuyển team sử dụng Puppeteer
 async function automateTeamTransfer(email: string, credentials: { account: string; password: string }) {
-  const browser = await puppeteer.launch({
-    headless: true, // Bắt buộc phải true trên Railway
-    defaultViewport: null,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process', // Quan trọng cho Railway
-      '--disable-gpu',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-features=VizDisplayCompositor',
-      '--disable-background-timer-throttling',
-      '--disable-backgrounding-occluded-windows',
-      '--disable-renderer-backgrounding',
-      '--incognito',
-      '--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ],
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
-  });
+  let browser;
+  
+  // Thử launch browser với nhiều configuration khác nhau
+  const launchConfigs = [
+    // Config 1: Full args (cho Railway)
+    {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-ipc-flooding-protection',
+        '--disable-hang-monitor',
+        '--disable-client-side-phishing-detection',
+        '--disable-popup-blocking',
+        '--disable-prompt-on-repost',
+        '--disable-sync',
+        '--disable-translate',
+        '--disable-windows10-custom-titlebar',
+        '--metrics-recording-only',
+        '--no-crash-upload',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--password-store=basic',
+        '--use-mock-keychain',
+        '--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      ],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      timeout: 30000
+    },
+    // Config 2: Minimal args (fallback)
+    {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--single-process'
+      ],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      timeout: 30000
+    },
+    // Config 3: Default với timeout
+    {
+      headless: true,
+      args: ['--no-sandbox'],
+      timeout: 30000
+    }
+  ];
+
+  for (let i = 0; i < launchConfigs.length; i++) {
+    try {
+      console.log(`Attempting to launch browser with config ${i + 1}...`);
+      browser = await puppeteer.launch(launchConfigs[i]);
+      console.log(`Browser launched successfully with config ${i + 1}`);
+      break;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Config ${i + 1} failed:`, errorMessage);
+      if (i === launchConfigs.length - 1) {
+        throw new Error(`All browser launch configurations failed. Last error: ${errorMessage}`);
+      }
+    }
+  }
+  
+  if (!browser) {
+    throw new Error('Failed to launch browser with any configuration');
+  }
 
   try {
     const page = await browser.newPage();
