@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import puppeteer from 'puppeteer';
 import { getCanvaVerificationCode } from '@/app/utils/gmail';
-import fs from 'fs';
 
 // Cấu hình Google OAuth2 credentials
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -56,11 +55,12 @@ async function getLatestTeamCredentials() {
 
 // Hàm tự động chuyển team sử dụng Puppeteer
 async function automateTeamTransfer(email: string, credentials: { account: string; password: string }) {
-  // Cấu hình cho production environment (Render.com)
   const isProduction = process.env.NODE_ENV === 'production';
   
-  let launchOptions: any = {
-    headless: isProduction ? 'new' : false,
+  console.log('Launching browser for environment:', isProduction ? 'production' : 'development');
+  
+  const browser = await puppeteer.launch({
+    headless: isProduction ? true : false,
     defaultViewport: null,
     args: [
       '--no-sandbox',
@@ -73,90 +73,16 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       '--disable-gpu',
       '--disable-blink-features=AutomationControlled',
       '--disable-features=VizDisplayCompositor',
-      '--incognito',
-      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ]
-  };
-
-  // Cấu hình executablePath cho production
-  if (isProduction) {
-    console.log('Production environment detected, trying to find Chrome...');
-    
-    // Debug: List cache directory
-    try {
-      const cacheDir = '/opt/render/.cache/puppeteer';
-      if (fs.existsSync(cacheDir)) {
-        console.log('Cache directory contents:');
-        const files = fs.readdirSync(cacheDir, { recursive: true });
-        console.log(files);
-        
-        // Try to find Chrome executable in cache
-        const chromeFiles = files.filter(file => 
-          typeof file === 'string' && file.includes('chrome') && !file.includes('.tar')
-        );
-        console.log('Chrome-related files:', chromeFiles);
-      } else {
-        console.log('Cache directory does not exist');
-      }
-    } catch (e) {
-      console.log('Cannot read cache directory:', e);
-    }
-    
-    // Try to find Chrome executable manually
-    const possiblePaths = [
-      '/opt/render/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome',
-      '/usr/bin/google-chrome-stable',
-      '/usr/bin/google-chrome',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/chromium'
-    ];
-    
-    let foundPath = null;
-    for (const pathPattern of possiblePaths) {
-      try {
-        if (pathPattern.includes('*')) {
-          // Handle glob pattern for cache directory
-          const baseDir = '/opt/render/.cache/puppeteer/chrome';
-          if (fs.existsSync(baseDir)) {
-            const subdirs = fs.readdirSync(baseDir);
-            for (const subdir of subdirs) {
-              const fullPath = `${baseDir}/${subdir}/chrome-linux64/chrome`;
-              if (fs.existsSync(fullPath)) {
-                foundPath = fullPath;
-                break;
-              }
-            }
-          }
-        } else {
-          if (fs.existsSync(pathPattern)) {
-            foundPath = pathPattern;
-          }
-        }
-        if (foundPath) break;
-      } catch (e) {
-        console.log(`Error checking path ${pathPattern}:`, e);
-      }
-    }
-    
-    if (foundPath) {
-      console.log('Found Chrome at:', foundPath);
-      launchOptions.executablePath = foundPath;
-    } else {
-      console.log('Chrome not found at any expected path, will try to let Puppeteer auto-detect...');
-    }
-    
-    // Thêm container-friendly args
-    launchOptions.args.push(
       '--disable-extensions',
-      '--disable-plugins', 
+      '--disable-plugins',
       '--disable-background-timer-throttling',
       '--disable-backgrounding-occluded-windows',
       '--disable-renderer-backgrounding',
-      '--disable-ipc-flooding-protection'
-    );
-  }
-  
-  const browser = await puppeteer.launch(launchOptions);
+      '--disable-ipc-flooding-protection',
+      '--incognito',
+      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ]
+  });
 
   try {
     const page = await browser.newPage();
