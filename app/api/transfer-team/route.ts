@@ -60,8 +60,10 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   
   console.log('Launching browser for environment:', isProduction ? 'production' : 'development');
   
-  // Find Chrome executable with inline implementation
-  console.log('🔍 Starting Chrome executable search...');
+  // HARDCODED CHROME PATH - Using working path from debug-chrome endpoint
+  console.log('🎯 Using hardcoded Chrome path from successful debug results...');
+  const WORKING_CHROME_PATH = '/opt/render/.cache/puppeteer/chrome/linux-127.0.6533.88/chrome-linux64/chrome';
+  
   console.log('🔍 Environment check:');
   console.log('  - NODE_ENV:', process.env.NODE_ENV);
   console.log('  - RENDER:', process.env.RENDER);
@@ -69,44 +71,50 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   console.log('  - PUPPETEER_CACHE_DIR:', process.env.PUPPETEER_CACHE_DIR);
   console.log('  - CHROME_BIN:', process.env.CHROME_BIN);
   console.log('  - Current working directory:', process.cwd());
+  console.log('  - HARDCODED_CHROME_PATH:', WORKING_CHROME_PATH);
   
   let chromeExecutable: string | undefined = undefined;
   
-  // Direct paths that we know work from debug results
-  const directPaths = [
-    '/opt/render/.cache/puppeteer/chrome/linux-127.0.6533.88/chrome-linux64/chrome',
-    '/opt/render/.cache/puppeteer/chrome/linux-137.0.7151.70/chrome-linux64/chrome',
-    process.env.PUPPETEER_EXECUTABLE_PATH,
-    process.env.CHROME_BIN
-  ].filter(Boolean) as string[];
+  // First try the hardcoded path that we know works
+  try {
+    const fs = require('fs');
+    if (fs.existsSync(WORKING_CHROME_PATH)) {
+      console.log('✅ Hardcoded Chrome path exists:', WORKING_CHROME_PATH);
+      chromeExecutable = WORKING_CHROME_PATH;
+    } else {
+      console.log('❌ Hardcoded Chrome path does not exist, trying fallbacks...');
+    }
+  } catch (error) {
+    console.log('❌ Error checking hardcoded path:', error);
+  }
   
-  console.log('🔍 Checking direct paths:', directPaths.length, 'paths');
+  // Fallback search if hardcoded path fails
+  if (!chromeExecutable) {
+    console.log('🔍 Fallback: searching for Chrome...');
+    const fallbackPaths = [
+      '/opt/render/.cache/puppeteer/chrome/linux-137.0.7151.70/chrome-linux64/chrome',
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      process.env.CHROME_BIN
+    ].filter(Boolean) as string[];
   
-  for (let i = 0; i < directPaths.length; i++) {
-    const path = directPaths[i];
-    console.log(`📍 Checking direct path ${i + 1}/${directPaths.length}:`, path);
+    console.log('🔍 Checking fallback paths:', fallbackPaths.length, 'paths');
     
-    try {
-      const fs = require('fs');
-      if (fs.existsSync(path)) {
-        console.log('📍 Path exists, testing executable:', path);
-        
-        // Test if executable works
-        try {
-          const { execSync } = require('child_process');
-          execSync(`"${path}" --version`, { timeout: 5000, stdio: 'pipe' });
-          console.log('✅ Chrome executable is working at:', path);
+    for (let i = 0; i < fallbackPaths.length; i++) {
+      const path = fallbackPaths[i];
+      console.log(`📍 Checking fallback path ${i + 1}/${fallbackPaths.length}:`, path);
+      
+      try {
+        const fs = require('fs');
+        if (fs.existsSync(path)) {
+          console.log('✅ Found working Chrome at:', path);
           chromeExecutable = path;
           break;
-        } catch (testError) {
-          console.log('❌ Chrome executable test failed:', path, testError);
-          continue;
+        } else {
+          console.log('❌ Fallback path does not exist:', path);
         }
-      } else {
-        console.log('❌ Path does not exist:', path);
+      } catch (error) {
+        console.log('❌ Failed to check fallback path:', path, error);
       }
-    } catch (error) {
-      console.log('❌ Failed to check path:', path, error);
     }
   }
   
