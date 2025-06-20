@@ -28,6 +28,8 @@ GOOGLE_CLIENT_SECRET=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
 GOOGLE_REFRESH_TOKEN=1//0g59U2_RHB2SeCgYIARAAGBASNwF-L9Irc3s2n4jNeez9tqWabBN5Fg7md6lHARqE9mJTK_cADD5kNSeX4vP3NEZBiwV2829SKcw
 SHEET_ID=1nNfRFr83wepWMlgoBAasPVV5hCjR7w2ZaAU0bjWEEq4
 GOOGLE_SCOPES=https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/gmail.readonly https://mail.google.com/
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 ```
 
 ## Bước 4: Cập nhật Google OAuth Redirect URIs
