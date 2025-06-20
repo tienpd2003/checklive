@@ -181,9 +181,16 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     
     console.log('Page loaded successfully!');
     
-    // Click Continue with email
+    // Click Continue with email - use Promise.all to handle navigation
     console.log('Looking for Continue with email button...');
     await safeWaitForSelector(page, 'button');
+    
+    // Set up navigation promise before clicking
+    const navigationPromise = page.waitForNavigation({ 
+      waitUntil: 'networkidle2', 
+      timeout: 20000 
+    }).catch(() => null); // Don't fail if no navigation
+    
     const emailButtonClicked = await safePageEvaluate(page, () => {
       const buttons = Array.from(document.querySelectorAll('button'));
       const emailButton = buttons.find(btn => btn.textContent?.includes('Continue with email'));
@@ -195,36 +202,52 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     });
     console.log('Clicked Continue with email:', emailButtonClicked);
     
-    // Wait for page navigation/transition after clicking Continue with email
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Wait for either navigation or timeout
+    console.log('Waiting for page navigation or stabilization...');
+    await navigationPromise;
     
-    // Check if page is still valid and not detached
+    // Additional wait for any SPA transitions
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    // Log current state
     try {
-      await page.title(); // Simple check to see if page is still valid
+      const currentUrl = page.url();
+      console.log('Current URL:', currentUrl);
     } catch (error) {
-      console.log('Page detached after Continue click, waiting for stabilization...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      console.log('Could not get current URL:', error instanceof Error ? error.message : 'Unknown error');
     }
     
-    // Debug: Kiểm tra tất cả input elements với error handling
-    let allInputs = [];
-    try {
-      allInputs = await page.$$eval('input', inputs => 
-        inputs.map(input => ({
-          type: input.type,
-          inputmode: input.inputMode,
-          name: input.name,
-          id: input.id,
-          autocomplete: input.autocomplete,
-          placeholder: input.placeholder,
-          className: input.className
-        }))
-      );
-      console.log('All inputs found:', allInputs);
-    } catch (error) {
-      console.log('Failed to get input elements (frame detached):', error instanceof Error ? error.message : 'Unknown error');
-      // Retry sau khi page reload
-      await new Promise(resolve => setTimeout(resolve, 3000));
+    // Check if page is still usable after navigation
+    let pageUsable = false;
+    for (let i = 0; i < 3; i++) {
+      try {
+        await page.evaluate(() => document.readyState);
+        pageUsable = true;
+        console.log('Page is usable for DOM operations');
+        break;
+      } catch (error) {
+        console.log(`Page not usable, attempt ${i + 1}/3. Waiting...`);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // If page is completely dead, try to reload current URL
+        if (i === 2) {
+          try {
+            const currentUrl = page.url();
+            console.log('Attempting to reload page:', currentUrl);
+            await page.goto(currentUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+            await page.evaluate(() => document.readyState);
+            pageUsable = true;
+            console.log('Page successfully reloaded and is now usable');
+          } catch (reloadError) {
+            console.log('Failed to reload page:', reloadError instanceof Error ? reloadError.message : 'Unknown error');
+            throw new Error('Page became permanently unusable after navigation');
+          }
+        }
+      }
+    }
+    
+    if (!pageUsable) {
+      throw new Error('Could not establish usable page context');
     }
     
     // Find and fill email
