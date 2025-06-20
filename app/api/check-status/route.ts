@@ -26,22 +26,18 @@ const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 // Bước 1: Tìm TEAM của email trong sheet CANVAPRO
 async function findTeamForEmail(email: string) {
   try {
-    console.log('Searching for email:', email);
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
       range: 'CANVAPRO!A:G', // Đọc từ cột A đến G
     });
 
     const rows = response.data.values || [];
-    console.log('Total rows in CANVAPRO:', rows.length);
     
     // Bỏ qua 2 dòng đầu tiên (header)
     for (let i = 2; i < rows.length; i++) {
       const row = rows[i];
-      console.log('Checking row:', i, 'Email in sheet:', row[2], 'Looking for:', email);
       if (row[2]?.toLowerCase() === email.toLowerCase()) { // Email ở cột C (index 2)
-        console.log('Found email match at row:', i);
-        console.log('Team:', row[6], 'TTKH:', row[5]); // Team ở cột G (index 6), TTKH ở cột F (index 5)
+        console.log('✅ Found email:', email, 'Team:', row[6], 'TTKH:', row[5]);
         return {
           team: row[6], // TEAM ở cột G (index 6)
           ttkh: row[5], // TTKH ở cột F (index 5)
@@ -54,7 +50,6 @@ async function findTeamForEmail(email: string) {
       }
     }
 
-    console.log('Email not found in sheet');
     return null; // Không tìm thấy email
   } catch (error) {
     console.error('Error in findTeamForEmail:', error);
@@ -65,24 +60,19 @@ async function findTeamForEmail(email: string) {
 // Bước 2: Kiểm tra trạng thái của TEAM trong sheet ADMIN FAM CANVA
 async function checkTeamStatus(teamCode: string) {
   try {
-    console.log('Checking status for team:', teamCode);
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
       range: 'ADMIN FAM CANVA!A:G', // Đọc từ cột A đến G
     });
 
     const rows = response.data.values || [];
-    console.log('Total rows in ADMIN FAM CANVA:', rows.length);
     
     // Bỏ qua dòng đầu tiên (header)
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
-      // Log thêm thông tin để debug
-      console.log('Row data:', row);
-      console.log('Checking row:', i, 'Team in sheet:', row[6], 'Looking for:', teamCode); // TÊN ĐỘI ở cột G (index 6)
       if (row[6]?.toLowerCase() === teamCode?.toLowerCase()) { // TÊN ĐỘI ở cột G (index 6)
         const isLive = row[3]?.toLowerCase() !== 'die'; // Die/Live ở cột D (index 3)
-        console.log('Found team match at row:', i, 'Status:', row[3]);
+        console.log('🔍 Team status:', teamCode, isLive ? '✅ LIVE' : '❌ DIE');
         return {
           isLive,
           account: row[1], // TÀI KHOẢN ở cột B (index 1)
@@ -93,7 +83,6 @@ async function checkTeamStatus(teamCode: string) {
       }
     }
 
-    console.log('Team not found in sheet');
     return null; // Không tìm thấy team
   } catch (error) {
     console.error('Error in checkTeamStatus:', error);
@@ -104,13 +93,11 @@ async function checkTeamStatus(teamCode: string) {
 // Tìm team còn live để chuyển người dùng sang
 async function findAvailableTeam(adminRows: any[]) {
   try {
-    console.log('Looking for available live team');
     // Bỏ qua dòng đầu tiên (header)
     for (let i = 1; i < adminRows.length; i++) {
       const row = adminRows[i];
-      console.log('Checking row:', i, 'Status:', row[3]);
       if (row[3]?.toLowerCase() !== 'die') { // Kiểm tra cột Die/Live ở cột D (index 3)
-        console.log('Found live team at row:', i, 'Team:', row[6]);
+        console.log('🔄 Found replacement team:', row[6]);
         return {
           teamCode: row[6], // TÊN ĐỘI ở cột G (index 6)
           account: row[1], // TÀI KHOẢN ở cột B (index 1)
@@ -118,7 +105,6 @@ async function findAvailableTeam(adminRows: any[]) {
         };
       }
     }
-    console.log('No available live team found');
     return null;
   } catch (error) {
     console.error('Error in findAvailableTeam:', error);
@@ -128,12 +114,9 @@ async function findAvailableTeam(adminRows: any[]) {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('Received POST request');
     const { email } = await request.json();
-    console.log('Email from request:', email);
     
     if (!email) {
-      console.log('No email provided');
       return NextResponse.json({ 
         status: 'error',
         message: 'Email is required'
@@ -141,12 +124,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Bước 1: Tìm team của email
-    console.log('Step 1: Finding team for email');
     const teamInfo = await findTeamForEmail(email);
-    console.log('Team info result:', teamInfo);
     
     if (!teamInfo) {
-      console.log('Email not found in CANVAPRO sheet');
       return NextResponse.json({ 
         status: 'error',
         message: 'Email không tồn tại trong hệ thống'
@@ -154,12 +134,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Bước 2: Kiểm tra trạng thái team
-    console.log('Step 2: Checking team status');
     const status = await checkTeamStatus(teamInfo.team);
-    console.log('Team status result:', status);
     
     if (!status) {
-      console.log('Team not found in ADMIN FAM CANVA sheet');
       return NextResponse.json({ 
         status: 'error',
         message: 'Team không tồn tại trong hệ thống'
@@ -167,7 +144,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Trả về kết quả
-    console.log('Preparing response');
     if (status.isLive) {
       return NextResponse.json({
         status: 'live',
