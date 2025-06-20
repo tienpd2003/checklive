@@ -105,7 +105,10 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     console.log('Launching browser with Railway-optimized config...');
     browser = await puppeteer.launch({
       headless: process.env.NODE_ENV === 'production' ? true : false,
-      defaultViewport: null,
+      defaultViewport: {
+        width: 1024,
+        height: 768
+      },
       timeout: 60000,
       protocolTimeout: 240000,
       args: [
@@ -134,11 +137,16 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
         '--disable-blink-features=AutomationControlled',
         '--memory-pressure-off',
         '--max_old_space_size=4096',
+        '--window-size=1024,768',
+        '--window-position=100,100',
+        '--disable-extensions-file-access-check',
+        '--disable-plugins-discovery',
+        '--start-maximized=false',
         ...(process.env.NODE_ENV === 'production' ? [
           '--single-process',
           '--max-old-space-size=2048'
         ] : []),
-        '--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       ]
     });
 
@@ -163,15 +171,37 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       throw new Error('Failed to create page after 3 attempts');
     }
     
-    // Basic stealth setup
+    // Enhanced stealth setup
     await page.evaluateOnNewDocument(() => {
+      // Remove webdriver property
       Object.defineProperty(navigator, 'webdriver', {
         get: () => undefined,
       });
+      
+      // Add chrome runtime
       (window as any).chrome = { runtime: {} };
+      
+      // Override plugins length
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      });
+      
+      // Override languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en'],
+      });
+      
+      // Override permissions
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters) => {
+        if (parameters.name === 'notifications') {
+          return Promise.resolve({ state: Notification.permission } as any);
+        }
+        return originalQuery(parameters);
+      };
     });
     
-    await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     
     console.log('Navigating to Canva login...');
     await page.goto('https://www.canva.com/login', { 
