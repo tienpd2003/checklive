@@ -6,7 +6,7 @@ import type { NextRequest } from 'next/server';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN;
-const SHEET_ID = '1nNfRFr83wepWMlgoBAasPVV5hCjR7w2ZaAU0bjWEEq4';
+const SHEET_ID = process.env.SHEET_ID;
 
 // Khởi tạo OAuth2 client
 const oauth2Client = new google.auth.OAuth2(

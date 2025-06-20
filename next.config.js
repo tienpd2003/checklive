@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  // Remove hardcoded credentials - use environment variables instead
+  reactStrictMode: true
 }
 
 module.exports = nextConfig 
