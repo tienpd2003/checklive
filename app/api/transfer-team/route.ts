@@ -195,8 +195,16 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     });
     console.log('Clicked Continue with email:', emailButtonClicked);
     
-    // Wait for email input
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Wait for page navigation/transition after clicking Continue with email
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // Check if page is still valid and not detached
+    try {
+      await page.title(); // Simple check to see if page is still valid
+    } catch (error) {
+      console.log('Page detached after Continue click, waiting for stabilization...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
     
     // Debug: Kiểm tra tất cả input elements với error handling
     let allInputs = [];
@@ -223,20 +231,24 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     let emailInput = null;
     try {
       // Thử tìm input với inputmode="email" trước
-      await page.waitForSelector('input[inputmode="email"]', { timeout: 5000 });
+      await safeWaitForSelector(page, 'input[inputmode="email"]', 5000);
       emailInput = await page.$('input[inputmode="email"]');
       console.log('Found email input with inputmode="email"');
     } catch (error) {
       try {
         // Fallback: tìm input với name="email"
-        await page.waitForSelector('input[name="email"]', { timeout: 5000 });
+        await safeWaitForSelector(page, 'input[name="email"]', 5000);
         emailInput = await page.$('input[name="email"]');
         console.log('Found email input with name="email"');
       } catch (error2) {
-        // Fallback cuối: tìm input với autocomplete="email"
-        await page.waitForSelector('input[autocomplete="email"]', { timeout: 5000 });
-        emailInput = await page.$('input[autocomplete="email"]');
-        console.log('Found email input with autocomplete="email"');
+        try {
+          // Fallback cuối: tìm input với autocomplete="email"
+          await safeWaitForSelector(page, 'input[autocomplete="email"]', 5000);
+          emailInput = await page.$('input[autocomplete="email"]');
+          console.log('Found email input with autocomplete="email"');
+        } catch (error3) {
+          console.log('Could not find any email input field');
+        }
       }
     }
     
@@ -277,7 +289,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     
     // Wait for password input
     console.log('Waiting for password input...');
-    await page.waitForSelector('input[type="password"]', { timeout: 10000 });
+    await safeWaitForSelector(page, 'input[type="password"]', 10000);
     
     const passwordInput = await page.$('input[type="password"]');
     if (passwordInput) {
@@ -302,7 +314,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     // Check for verification code
     let needsVerification = false;
     try {
-      const verificationInput = await page.waitForSelector('input[type="text"], input[placeholder*="code"]', { timeout: 5000 });
+      const verificationInput = await safeWaitForSelector(page, 'input[type="text"], input[placeholder*="code"]', 5000);
       if (verificationInput) {
         console.log('⚠️ Verification code required! Attempting to get code from email...');
         
@@ -380,8 +392,8 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     
     // Click role dropdown button "Thành viên đội"
     console.log('Looking for role dropdown...');
-    await page.waitForSelector('button[role="combobox"]', { timeout: 10000 });
-    await page.evaluate(() => {
+    await safeWaitForSelector(page, 'button[role="combobox"]', 10000);
+    const roleDropdownClicked = await safePageEvaluate(page, () => {
       const roleButtons = Array.from(document.querySelectorAll('button[role="combobox"]'));
       const roleDropdown = roleButtons.find(btn => 
         btn.textContent?.includes('Thành viên đội') || 
@@ -389,16 +401,18 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       );
       if (roleDropdown) {
         (roleDropdown as HTMLElement).click();
+        return true;
       }
+      return false;
     });
-    console.log('Clicked role dropdown');
+    console.log('Clicked role dropdown:', roleDropdownClicked);
     
     // Wait for dropdown options to appear
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Select "Nhà thiết kế thương hiệu của đội" role
     console.log('Selecting brand designer role...');
-    await page.evaluate(() => {
+    const brandDesignerSelected = await safePageEvaluate(page, () => {
       const roleOptions = Array.from(document.querySelectorAll('button'));
       const brandDesignerOption = roleOptions.find(btn => 
         btn.textContent?.includes('Nhà thiết kế thương hiệu của đội') ||
@@ -406,16 +420,18 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       );
       if (brandDesignerOption) {
         (brandDesignerOption as HTMLElement).click();
+        return true;
       }
+      return false;
     });
-    console.log('Selected brand designer role');
+    console.log('Selected brand designer role:', brandDesignerSelected);
     
     // Wait for role selection to complete
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Enter email to invite
     console.log('Looking for email input...');
-    await page.waitForSelector('input[inputmode="email"]', { timeout: 10000 });
+    await safeWaitForSelector(page, 'input[inputmode="email"]', 10000);
     const inviteEmailInput = await page.$('input[inputmode="email"]');
     if (inviteEmailInput) {
       await inviteEmailInput.click();
@@ -428,7 +444,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     
     // Click Confirm and Invite button
     console.log('Looking for confirm button...');
-    await page.evaluate(() => {
+    const confirmClicked = await safePageEvaluate(page, () => {
       const buttons = Array.from(document.querySelectorAll('button'));
       const confirmButton = buttons.find(btn => 
         btn.textContent?.includes('Xác nhận và mời') || 
@@ -437,9 +453,11 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       );
       if (confirmButton) {
         (confirmButton as HTMLElement).click();
+        return true;
       }
+      return false;
     });
-    console.log('Clicked confirm and invite button');
+    console.log('Clicked confirm and invite button:', confirmClicked);
     
     // Wait for success message and copy link button
     console.log('Waiting for invite success message...');
