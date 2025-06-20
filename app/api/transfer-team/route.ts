@@ -61,7 +61,9 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   console.log('Launching browser for environment:', isProduction ? 'production' : 'development');
   
   // Find Chrome executable
+  console.log('🔍 Starting Chrome executable search...');
   const chromeExecutable = findChromeExecutable();
+  console.log('🔍 Chrome executable search result:', chromeExecutable);
   
   // Configure browser launch options
   const launchOptions: any = {
@@ -73,11 +75,34 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   // Set executable path if found
   if (chromeExecutable) {
     launchOptions.executablePath = chromeExecutable;
+    console.log('✅ Using found Chrome executable:', chromeExecutable);
+  } else {
+    console.log('⚠️ No Chrome executable found, trying fallback methods...');
+    
+    // Fallback: Try direct paths that we know work from debug
+    const fallbackPaths = [
+      '/opt/render/.cache/puppeteer/chrome/linux-127.0.6533.88/chrome-linux64/chrome',
+      '/opt/render/.cache/puppeteer/chrome/linux-137.0.7151.70/chrome-linux64/chrome'
+    ];
+    
+    for (const fallbackPath of fallbackPaths) {
+      try {
+        const fs = require('fs');
+        if (fs.existsSync(fallbackPath)) {
+          console.log('✅ Found fallback Chrome at:', fallbackPath);
+          launchOptions.executablePath = fallbackPath;
+          break;
+        }
+      } catch (error) {
+        console.log('❌ Fallback path check failed:', fallbackPath, error);
+      }
+    }
   }
   
-  console.log('Browser launch options:', { 
+  console.log('🚀 Final browser launch options:', { 
     headless: launchOptions.headless, 
-    executablePath: launchOptions.executablePath || 'default' 
+    executablePath: launchOptions.executablePath || 'default',
+    argsCount: launchOptions.args.length
   });
   
   const browser = await puppeteer.launch(launchOptions);

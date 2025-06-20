@@ -8,21 +8,24 @@ export function findChromeExecutable(): string | undefined {
   
   console.log('🔍 Finding Chrome executable...');
   console.log('Environment: production =', isProduction, ', render =', isRender);
+  console.log('Current working directory:', process.cwd());
+  console.log('PUPPETEER_CACHE_DIR:', process.env.PUPPETEER_CACHE_DIR);
   
-  // If not production, let Puppeteer handle it
+  // Always try to find Chrome in production/Render environment
   if (!isProduction && !isRender) {
     console.log('Development mode - using default Puppeteer Chrome');
     return undefined;
   }
   
   // List of possible Chrome paths in production/Render
-  const possiblePaths = [
+  const staticPaths = [
     // Environment variable override
     process.env.PUPPETEER_EXECUTABLE_PATH,
     process.env.CHROME_BIN,
     
-    // Puppeteer cache paths (different versions)
+    // Puppeteer cache paths (different versions) - based on debug results
     '/opt/render/.cache/puppeteer/chrome/linux-127.0.6533.88/chrome-linux64/chrome',
+    '/opt/render/.cache/puppeteer/chrome/linux-137.0.7151.70/chrome-linux64/chrome', 
     '/opt/render/.cache/puppeteer/chrome/linux-128.0.6613.84/chrome-linux64/chrome', 
     '/opt/render/.cache/puppeteer/chrome/linux-129.0.6668.58/chrome-linux64/chrome',
     '/opt/render/.cache/puppeteer/chrome/linux-130.0.6723.58/chrome-linux64/chrome',
@@ -32,19 +35,52 @@ export function findChromeExecutable(): string | undefined {
     '/usr/bin/chromium',
     '/usr/bin/google-chrome-stable',
     '/usr/bin/google-chrome',
-    '/usr/bin/chrome',
-    
-    // Local installations
-    join(process.cwd(), '.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome'),
-    '/home/render/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome'
+    '/usr/bin/chrome'
   ].filter(Boolean) as string[];
   
+  // Dynamic paths - try to find Chrome in cache directory
+  const dynamicPaths: string[] = [];
+  try {
+    const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+    const chromeDir = join(cacheDir, 'chrome');
+    
+    if (existsSync(chromeDir)) {
+      console.log('📁 Chrome cache directory exists, scanning for versions...');
+      const chromeDirContents = require('fs').readdirSync(chromeDir);
+      for (const versionDir of chromeDirContents) {
+        if (versionDir.startsWith('linux-')) {
+          const chromePath = join(chromeDir, versionDir, 'chrome-linux64', 'chrome');
+          dynamicPaths.push(chromePath);
+          console.log('🔍 Added dynamic path:', chromePath);
+        }
+      }
+    }
+  } catch (error) {
+    console.log('❌ Failed to scan chrome cache directory:', error);
+  }
+  
+  const possiblePaths = [...staticPaths, ...dynamicPaths];
+  
   // Try each path
-  for (const path of possiblePaths) {
+  console.log('🔍 Checking possible paths:', possiblePaths.length, 'paths');
+  for (let i = 0; i < possiblePaths.length; i++) {
+    const path = possiblePaths[i];
+    console.log(`📍 Checking path ${i + 1}/${possiblePaths.length}:`, path);
     try {
       if (existsSync(path)) {
-        console.log('✅ Found Chrome executable at:', path);
-        return path;
+        console.log('📍 Path exists, testing executable:', path);
+        
+        // Test if the executable is actually runnable
+        try {
+          execSync(`"${path}" --version`, { timeout: 5000, stdio: 'pipe' });
+          console.log('✅ Chrome executable is working at:', path);
+          return path;
+        } catch (testError) {
+          console.log('❌ Chrome executable test failed:', path, testError);
+          continue; // Try next path
+        }
+      } else {
+        console.log('❌ Path does not exist:', path);
       }
     } catch (error) {
       console.log('❌ Failed to check path:', path, error);
