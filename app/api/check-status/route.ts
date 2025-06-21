@@ -37,7 +37,7 @@ async function findTeamForEmail(email: string) {
     for (let i = 2; i < rows.length; i++) {
       const row = rows[i];
       if (row[2]?.toLowerCase() === email.toLowerCase()) { // Email ở cột C (index 2)
-        console.log('✅ Found email:', email, 'Team:', row[6], 'TTKH:', row[5]);
+        console.log('✅ Tìm thấy email:', email, '- Team:', row[6], '- TTKH:', row[5]);
         return {
           team: row[6], // TEAM ở cột G (index 6)
           ttkh: row[5], // TTKH ở cột F (index 5)
@@ -72,7 +72,7 @@ async function checkTeamStatus(teamCode: string) {
       const row = rows[i];
       if (row[6]?.toLowerCase() === teamCode?.toLowerCase()) { // TÊN ĐỘI ở cột G (index 6)
         const isLive = row[3]?.toLowerCase() !== 'die'; // Die/Live ở cột D (index 3)
-        console.log('🔍 Team status:', teamCode, isLive ? '✅ LIVE' : '❌ DIE');
+        console.log('✅ Tìm thấy team:', teamCode, '- Trạng thái:', row[3], '- Tài khoản:', row[1]);
         return {
           isLive,
           account: row[1], // TÀI KHOẢN ở cột B (index 1)
@@ -97,7 +97,7 @@ async function findAvailableTeam(adminRows: any[]) {
     for (let i = 1; i < adminRows.length; i++) {
       const row = adminRows[i];
       if (row[3]?.toLowerCase() !== 'die') { // Kiểm tra cột Die/Live ở cột D (index 3)
-        console.log('🔄 Found replacement team:', row[6]);
+        console.log('✅ Tìm thấy team mới khả dụng:', row[6], '- Tài khoản:', row[1]);
         return {
           teamCode: row[6], // TÊN ĐỘI ở cột G (index 6)
           account: row[1], // TÀI KHOẢN ở cột B (index 1)

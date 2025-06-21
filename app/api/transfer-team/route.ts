@@ -8,7 +8,7 @@ import { getCanvaVerificationCode } from '@/app/utils/gmail';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN;
-const SHEET_ID = process.env.SHEET_ID;
+const SHEET_ID = process.env.SHEET_ID;  
 
 // Khởi tạo OAuth2 client
 const oauth2Client = new google.auth.OAuth2(
@@ -55,150 +55,33 @@ async function getLatestTeamCredentials() {
   }
 }
 
-// Helper function để xử lý detached frame errors
-async function safePageEvaluate<T>(page: any, fn: () => T, retries = 3): Promise<T | null> {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await page.evaluate(fn);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      if (errorMessage.includes('detached') || errorMessage.includes('Execution context')) {
-        console.log(`Page evaluate failed (attempt ${i + 1}/${retries}): ${errorMessage}`);
-        if (i === retries - 1) {
-          console.log('Max retries reached for page evaluate');
-          return null;
-        }
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        continue;
-      }
-      throw error; // Re-throw non-detached errors
-    }
-  }
-  return null;
-}
-
-// Helper function để wait for selector với retry
-async function safeWaitForSelector(page: any, selector: string, timeout = 10000, retries = 3) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await page.waitForSelector(selector, { timeout });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      if (errorMessage.includes('detached') || errorMessage.includes('Execution context')) {
-        console.log(`Wait for selector failed (attempt ${i + 1}/${retries}): ${errorMessage}`);
-        if (i === retries - 1) {
-          throw new Error(`Failed to find selector ${selector} after ${retries} attempts`);
-        }
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        continue;
-      }
-      throw error; // Re-throw non-detached errors
-    }
-  }
-}
-
 // Hàm tự động chuyển team sử dụng Puppeteer
 async function automateTeamTransfer(email: string, credentials: { account: string; password: string }) {
-  let browser = null;
-  
+  const browser = await puppeteer.launch({
+    headless: false,
+    defaultViewport: null,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-features=VizDisplayCompositor',
+      '--disable-dev-shm-usage', // Quan trọng cho VPS
+      '--disable-gpu', // Tránh lỗi GPU trên VPS
+      '--remote-debugging-port=9222',
+      '--incognito',
+      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ]
+  });
+
   try {
-    console.log('Launching browser with Railway-optimized config...');
-    browser = await puppeteer.launch({
-      headless: process.env.NODE_ENV === 'production' ? true : false,
-      defaultViewport: {
-        width: 1024,
-        height: 768
-      },
-      timeout: 60000,
-      protocolTimeout: 240000,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor,AudioServiceOutOfProcess',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--disable-extensions',
-        '--disable-plugins',
-        '--disable-default-apps',
-        '--disable-hang-monitor',
-        '--disable-prompt-on-repost',
-        '--disable-sync',
-        '--disable-translate',
-        '--metrics-recording-only',
-        '--no-default-browser-check',
-        '--safebrowsing-disable-auto-update',
-        '--disable-blink-features=AutomationControlled',
-        '--memory-pressure-off',
-        '--max_old_space_size=4096',
-        '--window-size=1024,768',
-        '--window-position=100,100',
-        '--disable-extensions-file-access-check',
-        '--disable-plugins-discovery',
-        '--start-maximized=false',
-        ...(process.env.NODE_ENV === 'production' ? [
-          '--single-process',
-          '--max-old-space-size=2048'
-        ] : []),
-        '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      ]
-    });
-
-    console.log('Browser launched successfully');
-
-    // Retry mechanism cho newPage
-    let page = null;
-    for (let i = 0; i < 3; i++) {
-      try {
-        console.log(`Creating new page, attempt ${i + 1}/3...`);
-        page = await browser.newPage();
-        console.log('Page created successfully');
-        break;
-      } catch (error) {
-        console.log(`Failed to create page, attempt ${i + 1}/3:`, error);
-        if (i === 2) throw error;
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    }
-
-    if (!page) {
-      throw new Error('Failed to create page after 3 attempts');
-    }
+    const page = await browser.newPage();
     
-    // Enhanced stealth setup
+    // Basic stealth setup
     await page.evaluateOnNewDocument(() => {
-      // Remove webdriver property
       Object.defineProperty(navigator, 'webdriver', {
         get: () => undefined,
       });
-      
-      // Add chrome runtime
       (window as any).chrome = { runtime: {} };
-      
-      // Override plugins length
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => [1, 2, 3, 4, 5],
-      });
-      
-      // Override languages
-      Object.defineProperty(navigator, 'languages', {
-        get: () => ['en-US', 'en'],
-      });
-      
-      // Override permissions
-      const originalQuery = window.navigator.permissions.query;
-      window.navigator.permissions.query = (parameters) => {
-        if (parameters.name === 'notifications') {
-          return Promise.resolve({ state: Notification.permission } as any);
-        }
-        return originalQuery(parameters);
-      };
     });
     
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
@@ -211,97 +94,53 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     
     console.log('Page loaded successfully!');
     
-    // Click Continue with email - use Promise.all to handle navigation
+    // Click Continue with email
     console.log('Looking for Continue with email button...');
-    await safeWaitForSelector(page, 'button');
-    
-    // Set up navigation promise before clicking
-    const navigationPromise = page.waitForNavigation({ 
-      waitUntil: 'networkidle2', 
-      timeout: 20000 
-    }).catch(() => null); // Don't fail if no navigation
-    
-    const emailButtonClicked = await safePageEvaluate(page, () => {
+    await page.waitForSelector('button', { timeout: 10000 });
+    await page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll('button'));
       const emailButton = buttons.find(btn => btn.textContent?.includes('Continue with email'));
       if (emailButton) {
         (emailButton as HTMLElement).click();
-        return true;
       }
-      return false;
     });
-    console.log('Clicked Continue with email:', emailButtonClicked);
+    console.log('Clicked Continue with email');
     
-    // Wait for either navigation or timeout
-    console.log('Waiting for page navigation or stabilization...');
-    await navigationPromise;
+    // Wait for email input
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // Additional wait for any SPA transitions
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    // Log current state
-    try {
-      const currentUrl = page.url();
-      console.log('Current URL:', currentUrl);
-    } catch (error) {
-      console.log('Could not get current URL:', error instanceof Error ? error.message : 'Unknown error');
-    }
-    
-    // Check if page is still usable after navigation
-    let pageUsable = false;
-    for (let i = 0; i < 3; i++) {
-      try {
-        await page.evaluate(() => document.readyState);
-        pageUsable = true;
-        console.log('Page is usable for DOM operations');
-        break;
-      } catch (error) {
-        console.log(`Page not usable, attempt ${i + 1}/3. Waiting...`);
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        // If page is completely dead, try to reload current URL
-        if (i === 2) {
-          try {
-            const currentUrl = page.url();
-            console.log('Attempting to reload page:', currentUrl);
-            await page.goto(currentUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-            await page.evaluate(() => document.readyState);
-            pageUsable = true;
-            console.log('Page successfully reloaded and is now usable');
-          } catch (reloadError) {
-            console.log('Failed to reload page:', reloadError instanceof Error ? reloadError.message : 'Unknown error');
-            throw new Error('Page became permanently unusable after navigation');
-          }
-        }
-      }
-    }
-    
-    if (!pageUsable) {
-      throw new Error('Could not establish usable page context');
-    }
+    // Debug: Kiểm tra tất cả input elements
+    const allInputs = await page.$$eval('input', inputs => 
+      inputs.map(input => ({
+        type: input.type,
+        inputmode: input.inputMode,
+        name: input.name,
+        id: input.id,
+        autocomplete: input.autocomplete,
+        placeholder: input.placeholder,
+        className: input.className
+      }))
+    );
+    console.log('All inputs found:', allInputs);
     
     // Find and fill email
     let emailInput = null;
     try {
       // Thử tìm input với inputmode="email" trước
-      await safeWaitForSelector(page, 'input[inputmode="email"]', 5000);
+      await page.waitForSelector('input[inputmode="email"]', { timeout: 5000 });
       emailInput = await page.$('input[inputmode="email"]');
       console.log('Found email input with inputmode="email"');
     } catch (error) {
       try {
         // Fallback: tìm input với name="email"
-        await safeWaitForSelector(page, 'input[name="email"]', 5000);
+        await page.waitForSelector('input[name="email"]', { timeout: 5000 });
         emailInput = await page.$('input[name="email"]');
         console.log('Found email input with name="email"');
       } catch (error2) {
-        try {
-          // Fallback cuối: tìm input với autocomplete="email"
-          await safeWaitForSelector(page, 'input[autocomplete="email"]', 5000);
-          emailInput = await page.$('input[autocomplete="email"]');
-          console.log('Found email input with autocomplete="email"');
-        } catch (error3) {
-          console.log('Could not find any email input field');
-        }
+        // Fallback cuối: tìm input với autocomplete="email"
+        await page.waitForSelector('input[autocomplete="email"]', { timeout: 5000 });
+        emailInput = await page.$('input[autocomplete="email"]');
+        console.log('Found email input with autocomplete="email"');
       }
     }
     
@@ -314,16 +153,14 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Click Continue
-      const continueClicked = await safePageEvaluate(page, () => {
+      await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const continueButton = buttons.find(btn => btn.textContent?.includes('Continue'));
         if (continueButton) {
           (continueButton as HTMLElement).click();
-          return true;
         }
-        return false;
       });
-      console.log('Clicked Continue:', continueClicked);
+      console.log('Clicked Continue');
       
       // Check for technical issue or security block
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -342,7 +179,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     
     // Wait for password input
     console.log('Waiting for password input...');
-    await safeWaitForSelector(page, 'input[type="password"]', 10000);
+    await page.waitForSelector('input[type="password"]', { timeout: 10000 });
     
     const passwordInput = await page.$('input[type="password"]');
     if (passwordInput) {
@@ -352,22 +189,20 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Click Log in
-      const loginClicked = await safePageEvaluate(page, () => {
+      await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const loginButton = buttons.find(btn => btn.textContent?.includes('Log in'));
         if (loginButton) {
           (loginButton as HTMLElement).click();
-          return true;
         }
-        return false;
       });
-      console.log('Clicked Log in:', loginClicked);
+      console.log('Clicked Log in');
     }
     
     // Check for verification code
     let needsVerification = false;
     try {
-      const verificationInput = await safeWaitForSelector(page, 'input[type="text"], input[placeholder*="code"]', 5000);
+      const verificationInput = await page.waitForSelector('input[type="text"], input[placeholder*="code"]', { timeout: 5000 });
       if (verificationInput) {
         console.log('⚠️ Verification code required! Attempting to get code from email...');
         
@@ -387,7 +222,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
           await verificationInput.type(verificationCode, { delay: 100 });
           
           // Click nút Submit/Continue
-          const submitClicked = await safePageEvaluate(page, () => {
+          await page.evaluate(() => {
             const buttons = Array.from(document.querySelectorAll('button'));
             const submitButton = buttons.find(btn => 
               btn.textContent?.includes('Submit') || 
@@ -396,11 +231,8 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
             );
             if (submitButton) {
               (submitButton as HTMLElement).click();
-              return true;
             }
-            return false;
           });
-          console.log('Clicked verification submit:', submitClicked);
           
           await new Promise(resolve => setTimeout(resolve, 3000));
         } else {
@@ -415,16 +247,24 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       console.log('No verification code required');
     }
     
+    // // Navigate to People page
+    // if (!needsVerification) {
+    //   await page.waitForNavigation({ timeout: 30000 });
+    // }
+    
     console.log('Navigating to People settings page...');
     await page.goto('https://www.canva.com/settings/people', { 
-      waitUntil: 'networkidle2', 
-      timeout: 15000 
+      waitUntil: 'domcontentloaded', 
+      timeout: 60000 
     });
+    
+    // Wait additional time for dynamic content to load
+    await new Promise(resolve => setTimeout(resolve, 3000));
     
     // Click Invite button
     console.log('Looking for Invite button...');
-    await safeWaitForSelector(page, 'button');
-    const inviteClicked = await safePageEvaluate(page, () => {
+    await page.waitForSelector('button', { timeout: 10000 });
+    await page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll('button'));
       const inviteButton = buttons.find(btn => 
         btn.textContent?.includes('Mời mọi người') || 
@@ -434,19 +274,17 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       );
       if (inviteButton) {
         (inviteButton as HTMLElement).click();
-        return true;
       }
-      return false;
     });
-    console.log('Clicked Invite button:', inviteClicked);
+    console.log('Clicked Invite button');
     
     // Wait for invite modal to appear
     await new Promise(resolve => setTimeout(resolve, 2000));
     
     // Click role dropdown button "Thành viên đội"
     console.log('Looking for role dropdown...');
-    await safeWaitForSelector(page, 'button[role="combobox"]', 10000);
-    const roleDropdownClicked = await safePageEvaluate(page, () => {
+    await page.waitForSelector('button[role="combobox"]', { timeout: 10000 });
+    await page.evaluate(() => {
       const roleButtons = Array.from(document.querySelectorAll('button[role="combobox"]'));
       const roleDropdown = roleButtons.find(btn => 
         btn.textContent?.includes('Thành viên đội') || 
@@ -454,18 +292,16 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       );
       if (roleDropdown) {
         (roleDropdown as HTMLElement).click();
-        return true;
       }
-      return false;
     });
-    console.log('Clicked role dropdown:', roleDropdownClicked);
+    console.log('Clicked role dropdown');
     
     // Wait for dropdown options to appear
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Select "Nhà thiết kế thương hiệu của đội" role
     console.log('Selecting brand designer role...');
-    const brandDesignerSelected = await safePageEvaluate(page, () => {
+    await page.evaluate(() => {
       const roleOptions = Array.from(document.querySelectorAll('button'));
       const brandDesignerOption = roleOptions.find(btn => 
         btn.textContent?.includes('Nhà thiết kế thương hiệu của đội') ||
@@ -473,18 +309,16 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       );
       if (brandDesignerOption) {
         (brandDesignerOption as HTMLElement).click();
-        return true;
       }
-      return false;
     });
-    console.log('Selected brand designer role:', brandDesignerSelected);
+    console.log('Selected brand designer role');
     
     // Wait for role selection to complete
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Enter email to invite
     console.log('Looking for email input...');
-    await safeWaitForSelector(page, 'input[inputmode="email"]', 10000);
+    await page.waitForSelector('input[inputmode="email"]', { timeout: 10000 });
     const inviteEmailInput = await page.$('input[inputmode="email"]');
     if (inviteEmailInput) {
       await inviteEmailInput.click();
@@ -497,7 +331,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     
     // Click Confirm and Invite button
     console.log('Looking for confirm button...');
-    const confirmClicked = await safePageEvaluate(page, () => {
+    await page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll('button'));
       const confirmButton = buttons.find(btn => 
         btn.textContent?.includes('Xác nhận và mời') || 
@@ -506,11 +340,9 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       );
       if (confirmButton) {
         (confirmButton as HTMLElement).click();
-        return true;
       }
-      return false;
     });
-    console.log('Clicked confirm and invite button:', confirmClicked);
+    console.log('Clicked confirm and invite button');
     
     // Wait for success message and copy link button
     console.log('Waiting for invite success message...');
@@ -524,9 +356,9 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     console.log('Looking for copy link button for email:', email);
     let inviteLink = null;
     try {
-      const copyResult = await safePageEvaluate(page, () => {
+      await page.evaluate((emailToFind) => {
         // Look for the specific invitation text pattern "Lời mời của [email] còn hiệu lực trong"
-        const inviteTextPattern = `Lời mời của ${email} còn hiệu lực trong`;
+        const inviteTextPattern = `Lời mời của ${emailToFind} còn hiệu lực trong`;
         console.log('Looking for text pattern:', inviteTextPattern);
         
         // Find all span elements that might contain the invitation text
@@ -536,7 +368,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
         for (const span of allSpans) {
           if (span.textContent && span.textContent.includes(inviteTextPattern)) {
             inviteTextSpan = span;
-            console.log('Found invite text span for:', email);
+            console.log('Found invite text span for:', emailToFind);
             break;
           }
         }
@@ -545,7 +377,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
           // Find the main container div that contains both the text and buttons
           // Based on HTML structure, look for div with class "_2fpXnQ HbS2lw" or similar main container
           let mainContainer = null;
-          let currentElement = inviteTextSpan as Element;
+                     let currentElement = inviteTextSpan as Element;
           
           // Search up the DOM tree to find the main container div
           for (let i = 0; i < 15; i++) {
@@ -569,13 +401,13 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
             
             if (copyButton) {
               (copyButton as HTMLElement).click();
-              console.log('Successfully clicked copy button for invited email:', email);
-              return 'success';
+              console.log('Successfully clicked copy button for invited email:', emailToFind);
+              return;
             } else {
-              console.log('Copy button not found in main container for:', email);
+              console.log('Copy button not found in main container for:', emailToFind);
             }
           } else {
-            console.log('Main container not found for:', email);
+            console.log('Main container not found for:', emailToFind);
           }
         } else {
           console.log('Invite text span not found for pattern:', inviteTextPattern);
@@ -591,13 +423,11 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
         if (fallbackButton) {
           (fallbackButton as HTMLElement).click();
           console.log('Used fallback copy button');
-          return 'fallback';
         } else {
           console.log('No copy button found at all');
-          return 'none';
         }
-      });
-      console.log('Copy link result:', copyResult);
+      }, email);
+      console.log('Clicked copy link button for the invited email');
       
       // Wait for clipboard operation
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -636,12 +466,12 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       }
     }
 
-    if (browser) await browser.close();
+    await browser.close();
     return inviteLink;
 
   } catch (error) {
     console.error('Automation error:', error);
-    if (browser) await browser.close();
+    await browser.close();
     throw error;
   }
 }
