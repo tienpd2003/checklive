@@ -21,6 +21,7 @@ oauth2Client.setCredentials({
   refresh_token: GOOGLE_REFRESH_TOKEN
 });
 
+// Khởi tạo sheets API với auth đã được cấu hình
 const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
 
 // Lấy thông tin tài khoản mới nhất từ sheet ADMIN FAM CANVA
@@ -48,6 +49,7 @@ async function getLatestTeamCredentials() {
     return {
       account: lastDataRow[1], // TÀI KHOẢN ở cột B (index 1)
       password: lastDataRow[2], // PASS ở cột C (index 2)
+      team: lastDataRow[6], // TÊN ĐỘI ở cột G (index 6)
     };
   } catch (error) {
     console.error('Error getting latest team credentials:', error);
@@ -247,11 +249,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       console.log('No verification code required');
     }
     
-    // // Navigate to People page
-    // if (!needsVerification) {
-    //   await page.waitForNavigation({ timeout: 30000 });
-    // }
-    
+    // Navigate to People page
     console.log('Navigating to People settings page...');
     await page.goto('https://www.canva.com/settings/people', { 
       waitUntil: 'domcontentloaded', 
@@ -259,210 +257,182 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     });
     
     // Wait additional time for dynamic content to load
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise(resolve => setTimeout(resolve, 7000));
     
-    // Click Invite button
-    console.log('Looking for Invite button...');
-    await page.waitForSelector('button', { timeout: 10000 });
-    await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button'));
-      const inviteButton = buttons.find(btn => 
-        btn.textContent?.includes('Mời mọi người') || 
-        btn.textContent?.includes('Invite') ||
-        btn.getAttribute('aria-label')?.includes('Mời mọi người') ||
-        btn.getAttribute('aria-label')?.includes('Invite')
-      );
-      if (inviteButton) {
-        (inviteButton as HTMLElement).click();
-      }
-    });
-    console.log('Clicked Invite button');
-    
-    // Wait for invite modal to appear
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Click role dropdown button "Thành viên đội"
-    console.log('Looking for role dropdown...');
-    await page.waitForSelector('button[role="combobox"]', { timeout: 10000 });
-    await page.evaluate(() => {
-      const roleButtons = Array.from(document.querySelectorAll('button[role="combobox"]'));
-      const roleDropdown = roleButtons.find(btn => 
-        btn.textContent?.includes('Thành viên đội') || 
-        btn.getAttribute('aria-label')?.includes('Chỉ định vai trò')
-      );
-      if (roleDropdown) {
-        (roleDropdown as HTMLElement).click();
-      }
-    });
-    console.log('Clicked role dropdown');
-    
-    // Wait for dropdown options to appear
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Select "Nhà thiết kế thương hiệu của đội" role
-    console.log('Selecting brand designer role...');
-    await page.evaluate(() => {
-      const roleOptions = Array.from(document.querySelectorAll('button'));
-      const brandDesignerOption = roleOptions.find(btn => 
-        btn.textContent?.includes('Nhà thiết kế thương hiệu của đội') ||
-        btn.textContent?.includes('Brand designer')
-      );
-      if (brandDesignerOption) {
-        (brandDesignerOption as HTMLElement).click();
-      }
-    });
-    console.log('Selected brand designer role');
-    
-    // Wait for role selection to complete
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Enter email to invite
-    console.log('Looking for email input...');
-    await page.waitForSelector('input[inputmode="email"]', { timeout: 10000 });
-    const inviteEmailInput = await page.$('input[inputmode="email"]');
-    if (inviteEmailInput) {
-      await inviteEmailInput.click();
-      await inviteEmailInput.type(email, { delay: 100 });
-      console.log('Typed email:', email);
-    }
-    
-    // Wait before clicking confirm
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Click Confirm and Invite button
-    console.log('Looking for confirm button...');
-    await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button'));
-      const confirmButton = buttons.find(btn => 
-        btn.textContent?.includes('Xác nhận và mời') || 
-        btn.textContent?.includes('Confirm') ||
-        (btn.textContent?.includes('Invite') && !btn.textContent?.includes('Mời mọi người'))
-      );
-      if (confirmButton) {
-        (confirmButton as HTMLElement).click();
-      }
-    });
-    console.log('Clicked confirm and invite button');
-    
-    // Wait for success message and copy link button
-    console.log('Waiting for invite success message...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    // Grant clipboard permissions
-    const context = browser.defaultBrowserContext();
-    await context.overridePermissions('https://www.canva.com', ['clipboard-read', 'clipboard-write']);
-    
-    // Click copy invite link button for the specific email
-    console.log('Looking for copy link button for email:', email);
     let inviteLink = null;
-    try {
-      await page.evaluate((emailToFind) => {
-        // Look for the specific invitation text pattern "Lời mời của [email] còn hiệu lực trong"
-        const inviteTextPattern = `Lời mời của ${emailToFind} còn hiệu lực trong`;
-        console.log('Looking for text pattern:', inviteTextPattern);
-        
-        // Find all span elements that might contain the invitation text
-        const allSpans = Array.from(document.querySelectorAll('span'));
-        let inviteTextSpan = null;
-        
-        for (const span of allSpans) {
-          if (span.textContent && span.textContent.includes(inviteTextPattern)) {
-            inviteTextSpan = span;
-            console.log('Found invite text span for:', emailToFind);
-            break;
-          }
-        }
-        
-        if (inviteTextSpan) {
-          // Find the main container div that contains both the text and buttons
-          // Based on HTML structure, look for div with class "_2fpXnQ HbS2lw" or similar main container
-          let mainContainer = null;
-                     let currentElement = inviteTextSpan as Element;
-          
-          // Search up the DOM tree to find the main container div
-          for (let i = 0; i < 15; i++) {
-            if (!currentElement) break;
-            
-            // Check if this element contains both the text and has buttons
-            const buttonsInElement = currentElement.querySelectorAll('button[aria-label*="Sao chép liên kết duy nhất"], button[aria-label*="Copy unique link"]');
-            
-            if (buttonsInElement.length > 0) {
-              mainContainer = currentElement;
-              console.log('Found main container at level:', i);
-              break;
-            }
-            
-            currentElement = currentElement.parentElement as Element;
-          }
-          
-          if (mainContainer) {
-            // Now find the copy button specifically within this main container
-            const copyButton = mainContainer.querySelector('button[aria-label*="Sao chép liên kết duy nhất"], button[aria-label*="Copy unique link"]');
-            
-            if (copyButton) {
-              (copyButton as HTMLElement).click();
-              console.log('Successfully clicked copy button for invited email:', emailToFind);
-              return;
-            } else {
-              console.log('Copy button not found in main container for:', emailToFind);
-            }
-          } else {
-            console.log('Main container not found for:', emailToFind);
-          }
-        } else {
-          console.log('Invite text span not found for pattern:', inviteTextPattern);
-        }
-        
-        // Fallback: click the first copy button found
-        console.log('Using fallback method to find copy button');
-        const allButtons = Array.from(document.querySelectorAll('button'));
-        const fallbackButton = allButtons.find(btn => 
-          btn.getAttribute('aria-label')?.includes('Sao chép liên kết duy nhất') ||
-          btn.getAttribute('aria-label')?.includes('Copy unique link')
-        );
-        if (fallbackButton) {
-          (fallbackButton as HTMLElement).click();
-          console.log('Used fallback copy button');
-        } else {
-          console.log('No copy button found at all');
-        }
-      }, email);
-      console.log('Clicked copy link button for the invited email');
-      
-      // Wait for clipboard operation
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Get invite link from clipboard
-      inviteLink = await page.evaluate(async () => {
-        try {
-          return await navigator.clipboard.readText();
-        } catch (error) {
-          console.error('Clipboard read error:', error);
-          return null;
-        }
-      });
-      
-      console.log('Retrieved invite link:', inviteLink);
-      
-    } catch (error) {
-      console.error('Error copying invite link:', error);
-      
-      // Fallback: try to find the link in the DOM
+    let maxRetries = 10; // Số lần thử tối đa
+    let retryCount = 0;
+
+    while (!inviteLink && retryCount < maxRetries) {
       try {
-        inviteLink = await page.evaluate(() => {
-          // Look for any element that might contain the invite link
-          const possibleElements = Array.from(document.querySelectorAll('*'));
-          for (const el of possibleElements) {
-            const text = el.textContent || el.getAttribute('value') || el.getAttribute('href');
-            if (text && (text.includes('https://www.canva.com/brand/join') || text.includes('canva.com/brand'))) {
-              return text;
+        retryCount++;
+        console.log(`Thử lần ${retryCount} để mời người dùng...`);
+
+        // Click Invite button
+        console.log('Looking for Invite button...');
+        await page.waitForSelector('button', { timeout: 10000 });
+        await page.evaluate(() => {
+          const buttons = Array.from(document.querySelectorAll('button'));
+          const inviteButton = buttons.find(btn => 
+            btn.textContent?.includes('Mời mọi người') || 
+            btn.textContent?.includes('Invite') ||
+            btn.getAttribute('aria-label')?.includes('Mời mọi người') ||
+            btn.getAttribute('aria-label')?.includes('Invite')
+          );
+          if (inviteButton) {
+            (inviteButton as HTMLElement).click();
+          }
+        });
+        console.log('Clicked Invite button');
+        
+        // Wait for invite modal to appear
+        await new Promise(resolve => setTimeout(resolve, 4000));
+        
+        // Click role dropdown button "Thành viên đội"
+        console.log('Looking for role dropdown...');
+        await page.waitForSelector('button[role="combobox"]', { timeout: 10000 });
+        await page.evaluate(() => {
+          const roleButtons = Array.from(document.querySelectorAll('button[role="combobox"]'));
+          const roleDropdown = roleButtons.find(btn => 
+            btn.textContent?.includes('Thành viên đội') || 
+            btn.getAttribute('aria-label')?.includes('Chỉ định vai trò')
+          );
+          if (roleDropdown) {
+            (roleDropdown as HTMLElement).click();
+          }
+        });
+        console.log('Clicked role dropdown');
+        
+        // Wait for dropdown options to appear
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Select "Nhà thiết kế thương hiệu của đội" role
+        console.log('Selecting brand designer role...');
+        await page.evaluate(() => {
+          const roleOptions = Array.from(document.querySelectorAll('button'));
+          const brandDesignerOption = roleOptions.find(btn => 
+            btn.textContent?.includes('Nhà thiết kế thương hiệu của đội') ||
+            btn.textContent?.includes('Brand designer')
+          );
+          if (brandDesignerOption) {
+            (brandDesignerOption as HTMLElement).click();
+          }
+        });
+        console.log('Selected brand designer role');
+        
+        // Wait for role selection to complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Enter email to invite
+        console.log('Looking for email input...');
+        await page.waitForSelector('input[inputmode="email"]', { timeout: 10000 });
+        const inviteEmailInput = await page.$('input[inputmode="email"]');
+        if (inviteEmailInput) {
+          await inviteEmailInput.click();
+          await inviteEmailInput.type(email, { delay: 100 });
+          console.log('Typed email:', email);
+        }
+        
+        // Wait before clicking confirm
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        // Click Confirm and Invite button
+        console.log('Looking for confirm button...');
+        await page.evaluate(() => {
+          const buttons = Array.from(document.querySelectorAll('button'));
+          const confirmButton = buttons.find(btn => 
+            btn.textContent?.includes('Xác nhận và mời') || 
+            btn.textContent?.includes('Confirm') ||
+            (btn.textContent?.includes('Invite') && !btn.textContent?.includes('Mời mọi người'))
+          );
+          if (confirmButton) {
+            (confirmButton as HTMLElement).click();
+          }
+        });
+        console.log('Clicked confirm and invite button');
+        
+        // Wait for success message and copy link button
+        console.log('Waiting for invite success message...');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Grant clipboard permissions
+        const context = browser.defaultBrowserContext();
+        await context.overridePermissions('https://www.canva.com', ['clipboard-read', 'clipboard-write']);
+        // Try to get the invite link
+        try {
+          // Kiểm tra xem có text "Lời mời của [email]" không
+          const inviteTextExists = await page.evaluate((emailToFind) => {
+            const inviteTextPattern = `Lời mời của ${emailToFind}`;
+            const allSpans = Array.from(document.querySelectorAll('span'));
+            return allSpans.some(span => 
+              span.textContent && span.textContent.includes(inviteTextPattern)
+            );
+          }, email);
+
+          if (inviteTextExists) {
+            // Nếu tìm thấy text, tiến hành copy link
+            await page.evaluate((emailToFind) => {
+              const buttons = Array.from(document.querySelectorAll('button'));
+              const copyButton = buttons.find(btn => 
+                btn.getAttribute('aria-label')?.includes('Sao chép liên kết duy nhất') ||
+                btn.getAttribute('aria-label')?.includes('Copy unique link')
+              );
+              if (copyButton) {
+                (copyButton as HTMLElement).click();
+              }
+            }, email);
+
+            // Wait for clipboard operation
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Get invite link from clipboard
+            inviteLink = await page.evaluate(async () => {
+              try {
+                return await navigator.clipboard.readText();
+              } catch (error) {
+                return null;
+              }
+            });
+
+            if (inviteLink) {
+              console.log('Successfully got invite link on try', retryCount);
+              break; // Thoát khỏi vòng lặp vì đã tìm thấy và copy được link
             }
           }
-          return null;
-        });
-        console.log('Found invite link in DOM:', inviteLink);
-      } catch (domError) {
-        console.error('Error finding link in DOM:', domError);
+
+          // Nếu không tìm thấy text hoặc không copy được link, tiếp tục vòng lặp
+          console.log(`Invite text not found for email on try ${retryCount}, retrying...`);
+          if (retryCount === maxRetries) {
+            throw new Error(`Could not find invite text for email: ${email} after ${maxRetries} tries`);
+          }
+          
+          // Đợi một chút trước khi thử lại
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          // Refresh trang để thử lại
+          await page.reload({ waitUntil: 'networkidle2' });
+          await new Promise(resolve => setTimeout(resolve, 5000));
+
+        } catch (error) {
+          console.log(`Error in invitation process on try ${retryCount}:`, error);
+          if (retryCount === maxRetries) {
+            throw error;
+          }
+          // Đợi một chút trước khi thử lại
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          // Refresh trang để thử lại
+          await page.reload({ waitUntil: 'networkidle2' });
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+
+      } catch (error) {
+        console.log(`Error in invitation process on try ${retryCount}:`, error);
+        if (retryCount === maxRetries) {
+          throw error;
+        }
+        // Đợi một chút trước khi thử lại
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Refresh trang để thử lại
+        await page.reload({ waitUntil: 'networkidle2' });
+        await new Promise(resolve => setTimeout(resolve, 5000));
       }
     }
 
@@ -472,6 +442,49 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
   } catch (error) {
     console.error('Automation error:', error);
     await browser.close();
+    throw error;
+  }
+}
+
+// Hàm update TEAM trong sheet CANVAPRO
+async function updateTeamInSheet(email: string, newTeam: string) {
+  try {
+    // Lấy dữ liệu từ sheet CANVAPRO
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: 'CANVAPRO!A:G',
+    });
+
+    const rows = response.data.values || [];
+    
+    // Tìm row chứa email
+    let rowIndex = -1;
+    for (let i = 2; i < rows.length; i++) {
+      const currentEmail = rows[i][2];
+      if (currentEmail?.toLowerCase() === email.toLowerCase()) {
+        rowIndex = i + 1;
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      throw new Error(`Không tìm thấy email ${email} trong sheet CANVAPRO`);
+    }
+
+    // Update TEAM ở cột G
+    const updateResult = await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `CANVAPRO!G${rowIndex}`,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [[newTeam]]
+      }
+    });
+
+    console.log('Update sheet thành công:', updateResult.status === 200 ? '✅' : '❌');
+
+  } catch (error) {
+    console.error('Lỗi khi update sheet:', error instanceof Error ? error.message : 'Unknown error');
     throw error;
   }
 }
@@ -506,19 +519,36 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      status: 'success',
-      message: 'Đã tạo link mời thành công',
-      data: {
-        inviteLink
-      }
-    });
+    try {
+      // Chỉ update sheet khi đã có invite link thành công
+      await updateTeamInSheet(email, credentials.team);
+      
+      return NextResponse.json({
+        status: 'success',
+        message: 'Đã chuyển team và cập nhật sheet thành công',
+        data: {
+          inviteLink,
+          newTeam: credentials.team
+        }
+      });
+    } catch (sheetError) {
+      // Nếu update sheet lỗi nhưng đã có invite link
+      console.error('Lỗi khi update sheet:', sheetError);
+      return NextResponse.json({
+        status: 'partial_success',
+        message: 'Đã tạo link mời nhưng không thể cập nhật sheet',
+        data: {
+          inviteLink,
+          newTeam: credentials.team
+        }
+      });
+    }
 
   } catch (error) {
     console.error('API error:', error);
     return NextResponse.json({ 
       status: 'error',
-      message: 'Có lỗi xảy ra trong quá trình chuyển team'
+      message: error instanceof Error ? error.message : 'Có lỗi xảy ra trong quá trình chuyển team'
     });
   }
 } 

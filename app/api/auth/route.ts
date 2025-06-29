@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: [
-        'https://www.googleapis.com/auth/spreadsheets.readonly',
+        'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/gmail.readonly',
         'https://mail.google.com/'
       ],

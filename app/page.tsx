@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ClipboardIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { ClipboardIcon, ArrowPathIcon, CheckIcon } from '@heroicons/react/24/outline';
 
 type ResponseData = {
   status: 'live' | 'die' | 'error';
@@ -33,6 +33,7 @@ export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [language, setLanguage] = useState<'vi' | 'en'>('vi');
   const [showNotification, setShowNotification] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
 
   const handleCheck = async () => {
     if (!email) return;
@@ -83,7 +84,8 @@ export default function Home() {
           ...prev!,
           data: {
             ...prev!.data,
-            inviteLink: data.data.inviteLink
+            inviteLink: data.data.inviteLink,
+            newTeam: data.data.newTeam
           }
         }));
         setTransferStatus('success');
@@ -367,20 +369,68 @@ export default function Home() {
                                 isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
                               }`}>
                                 <div className="flex items-center justify-between">
-                                  <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Link mời:</p>
+                                  <p className={`text-sm font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Link mời:</p>
                                   <button
-                                    onClick={() => copyToClipboard(result.data?.inviteLink || '')}
+                                    onClick={() => {
+                                      const textToCopy = `Link mời:\n${result.data?.inviteLink || ''}\n\nĐã chuyển sang team: ${result.data?.newTeam || ''}`;
+                                      navigator.clipboard.writeText(textToCopy)
+                                        .then(() => {
+                                          // Đổi icon thành dấu tích
+                                          setIsCopied(true);
+                                          
+                                          // Hiển thị thông báo nhỏ
+                                          const toast = document.createElement('div');
+                                          toast.className = `fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg transition-opacity duration-300`;
+                                          toast.textContent = 'Đã copy thành công!';
+                                          document.body.appendChild(toast);
+                                          
+                                          // Đổi lại icon copy sau 2 giây
+                                          setTimeout(() => {
+                                            setIsCopied(false);
+                                          }, 2000);
+                                          
+                                          // Xóa thông báo sau 2 giây
+                                          setTimeout(() => {
+                                            toast.style.opacity = '0';
+                                            setTimeout(() => {
+                                              document.body.removeChild(toast);
+                                            }, 300);
+                                          }, 2000);
+                                        })
+                                        .catch(() => {
+                                          // Hiển thị thông báo lỗi nếu có
+                                          const toast = document.createElement('div');
+                                          toast.className = `fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg transition-opacity duration-300`;
+                                          toast.textContent = 'Không thể copy!';
+                                          document.body.appendChild(toast);
+                                          
+                                          setTimeout(() => {
+                                            toast.style.opacity = '0';
+                                            setTimeout(() => {
+                                              document.body.removeChild(toast);
+                                            }, 300);
+                                          }, 2000);
+                                        });
+                                    }}
                                     className={`p-1 rounded hover:bg-opacity-20 ${
                                       isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'
-                                    }`}
+                                    } ${isCopied ? 'bg-green-500 text-white' : ''}`}
+                                    title="Copy tất cả thông tin"
                                   >
-                                    <ClipboardIcon className="h-4 w-4" />
+                                    {isCopied ? (
+                                      <CheckIcon className="h-4 w-4" />
+                                    ) : (
+                                      <ClipboardIcon className="h-4 w-4" />
+                                    )}
                                   </button>
                                 </div>
                                 <p className={`mt-2 text-sm break-all ${
                                   isDarkMode ? 'text-gray-400' : 'text-gray-500'
                                 }`}>
                                   {result.data.inviteLink}
+                                </p>
+                                <p className={`mt-2 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                                  <span className="font-bold">Đã chuyển sang team:</span> {result.data.newTeam}
                                 </p>
                               </div>
                             )}
