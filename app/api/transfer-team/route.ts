@@ -4,6 +4,21 @@ import type { NextRequest } from 'next/server';
 import puppeteer from 'puppeteer';
 import { getCanvaVerificationCode } from '@/app/utils/gmail';
 
+// Global lock variable to track transfer process
+let isTransferInProgress = false;
+let currentTransferEmail: string | null = null;
+let transferStartTime: number | null = null;
+
+// Function to check and clear stale lock (if process has been running for more than 5 minutes)
+function clearStaleLock() {
+  if (isTransferInProgress && transferStartTime && (Date.now() - transferStartTime > 5 * 60 * 1000)) {
+    isTransferInProgress = false;
+    currentTransferEmail = null;
+    transferStartTime = null;
+    console.log('Cleared stale lock');
+  }
+}
+
 // Cấu hình Google OAuth2 credentials
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -361,26 +376,22 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
         try {
           // Kiểm tra xem có text "Lời mời của [email]" không
           const inviteTextExists = await page.evaluate((emailToFind) => {
-            const inviteTextPattern = `Lời mời của ${emailToFind}`;
-            const allSpans = Array.from(document.querySelectorAll('span'));
-            return allSpans.some(span => 
-              span.textContent && span.textContent.includes(inviteTextPattern)
-            );
+            const rows = Array.from(document.querySelectorAll('tr, div[role="row"]'));
+            for (const row of rows) {
+              // Kiểm tra nếu row chứa email cần tìm
+              if (row.textContent?.includes(emailToFind)) {
+                // Tìm nút copy trong cùng row
+                const copyButton = row.querySelector('button[aria-label*="Sao chép liên kết duy nhất"], button[aria-label*="Copy unique link"]');
+                if (copyButton) {
+                  (copyButton as HTMLElement).click();
+                  return true;
+                }
+              }
+            }
+            return false;
           }, email);
 
           if (inviteTextExists) {
-            // Nếu tìm thấy text, tiến hành copy link
-            await page.evaluate((emailToFind) => {
-              const buttons = Array.from(document.querySelectorAll('button'));
-              const copyButton = buttons.find(btn => 
-                btn.getAttribute('aria-label')?.includes('Sao chép liên kết duy nhất') ||
-                btn.getAttribute('aria-label')?.includes('Copy unique link')
-              );
-              if (copyButton) {
-                (copyButton as HTMLElement).click();
-              }
-            }, email);
-
             // Wait for clipboard operation
             await new Promise(resolve => setTimeout(resolve, 2000));
             
@@ -500,51 +511,105 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Lấy thông tin tài khoản mới nhất
-    const credentials = await getLatestTeamCredentials();
-    if (!credentials) {
+    // Clear any stale locks before checking
+    clearStaleLock();
+
+    // Check if transfer is already in progress
+    if (isTransferInProgress) {
       return NextResponse.json({
         status: 'error',
-        message: 'Không tìm thấy thông tin tài khoản mới'
+        code: 'TRANSFER_IN_PROGRESS',
+        // message: `Hệ thống đang xử lý chuyển team cho email ${currentTransferEmail}. Vui lòng thử lại sau.`
+        message: `Hệ thống đang xử lý chuyển team cho email khác. Vui lòng thử lại sau.`
+
       });
     }
 
-    // Thực hiện quá trình chuyển team
-    const inviteLink = await automateTeamTransfer(email, credentials);
-    
-    if (!inviteLink) {
-      return NextResponse.json({
-        status: 'error',
-        message: 'Không thể tạo link mời'
-      });
-    }
+    // Set lock
+    isTransferInProgress = true;
+    currentTransferEmail = email;
+    transferStartTime = Date.now();
 
     try {
-      // Chỉ update sheet khi đã có invite link thành công
-      await updateTeamInSheet(email, credentials.team);
+      // Lấy thông tin tài khoản mới nhất
+      const credentials = await getLatestTeamCredentials();
+      if (!credentials) {
+        isTransferInProgress = false;
+        currentTransferEmail = null;
+        transferStartTime = null;
+        return NextResponse.json({
+          status: 'error',
+          message: 'Không tìm thấy thông tin tài khoản mới'
+        });
+      }
+
+      // Thực hiện quá trình chuyển team
+      const inviteLink = await automateTeamTransfer(email, credentials);
       
-      return NextResponse.json({
-        status: 'success',
-        message: 'Đã chuyển team và cập nhật sheet thành công',
-        data: {
-          inviteLink,
-          newTeam: credentials.team
-        }
-      });
-    } catch (sheetError) {
-      // Nếu update sheet lỗi nhưng đã có invite link
-      console.error('Lỗi khi update sheet:', sheetError);
-      return NextResponse.json({
-        status: 'partial_success',
-        message: 'Đã tạo link mời nhưng không thể cập nhật sheet',
-        data: {
-          inviteLink,
-          newTeam: credentials.team
-        }
+      if (!inviteLink) {
+        isTransferInProgress = false;
+        currentTransferEmail = null;
+        transferStartTime = null;
+        return NextResponse.json({
+          status: 'error',
+          message: 'Không thể tạo link mời'
+        });
+      }
+
+      try {
+        // Chỉ update sheet khi đã có invite link thành công
+        await updateTeamInSheet(email, credentials.team);
+        
+        // Release lock before returning success
+        isTransferInProgress = false;
+        currentTransferEmail = null;
+        transferStartTime = null;
+
+        return NextResponse.json({
+          status: 'success',
+          message: 'Đã chuyển team và cập nhật sheet thành công',
+          data: {
+            inviteLink,
+            newTeam: credentials.team
+          }
+        });
+      } catch (sheetError) {
+        // Release lock before returning partial success
+        isTransferInProgress = false;
+        currentTransferEmail = null;
+        transferStartTime = null;
+
+        // Nếu update sheet lỗi nhưng đã có invite link
+        console.error('Lỗi khi update sheet:', sheetError);
+        return NextResponse.json({
+          status: 'partial_success',
+          message: 'Đã tạo link mời nhưng không thể cập nhật sheet',
+          data: {
+            inviteLink,
+            newTeam: credentials.team
+          }
+        });
+      }
+
+    } catch (error) {
+      // Release lock in case of any error
+      isTransferInProgress = false;
+      currentTransferEmail = null;
+      transferStartTime = null;
+
+      console.error('API error:', error);
+      return NextResponse.json({ 
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Có lỗi xảy ra trong quá trình chuyển team'
       });
     }
 
   } catch (error) {
+    // Release lock in case of any error in the outer try-catch
+    isTransferInProgress = false;
+    currentTransferEmail = null;
+    transferStartTime = null;
+
     console.error('API error:', error);
     return NextResponse.json({ 
       status: 'error',

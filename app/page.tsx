@@ -22,6 +22,7 @@ type ResponseData = {
     newPassword?: string;
     inviteLink?: string;
   };
+  errorMessage?: string;
 };
 
 export default function Home() {
@@ -91,9 +92,18 @@ export default function Home() {
         setTransferStatus('success');
       } else {
         setTransferStatus('error');
+        // Lưu thông báo lỗi để hiển thị
+        setResult(prev => ({
+          ...prev!,
+          errorMessage: data.message
+        }));
       }
     } catch (error) {
       setTransferStatus('error');
+      setResult(prev => ({
+        ...prev!,
+        errorMessage: 'Có lỗi xảy ra khi chuyển team. Vui lòng thử lại.'
+      }));
     }
   };
 
@@ -436,7 +446,7 @@ export default function Home() {
                             )}
 
                             {transferStatus === 'error' && (
-                              <p className="text-red-500">Có lỗi xảy ra khi chuyển team. Vui lòng thử lại.</p>
+                              <p className="text-red-500">{result?.errorMessage || 'Có lỗi xảy ra khi chuyển team. Vui lòng thử lại.'}</p>
                             )}
                           </div>
                         </>
