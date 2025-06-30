@@ -10,9 +10,14 @@ let currentTransferEmail: string | null = null;
 let transferStartTime: number | null = null;
 let currentBrowser: any = null;
 
-// Function to check and clear stale lock (if process has been running for more than 5 minutes)
+// Function to check and clear stale lock (if process has been running for more than 10 minutes)
 async function clearStaleLock() {
-  if (isTransferInProgress && transferStartTime && (Date.now() - transferStartTime > 10 * 60 * 1000)) {
+  const currentTime = Date.now();
+  const hasTimedOut = transferStartTime && (currentTime - transferStartTime > 10 * 60 * 1000);
+  
+  // Chỉ clear lock nếu process đang chạy và đã timeout
+  if (isTransferInProgress && hasTimedOut) {
+    console.log('Clearing stale lock after timeout...');
     isTransferInProgress = false;
     currentTransferEmail = null;
     transferStartTime = null;
@@ -25,7 +30,9 @@ async function clearStaleLock() {
       currentBrowser = null;
     }
     console.log('Cleared stale lock and closed browser');
+    return true;
   }
+  return false;
 }
 
 // Cấu hình Google OAuth2 credentials
@@ -334,7 +341,8 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
           const roleButtons = Array.from(document.querySelectorAll('button[role="combobox"]'));
           const roleDropdown = roleButtons.find(btn => 
             btn.textContent?.includes('Thành viên đội') || 
-            btn.getAttribute('aria-label')?.includes('Chỉ định vai trò')
+            btn.getAttribute('aria-label')?.includes('Chỉ định vai trò') ||
+            btn.getAttribute('aria-label')?.includes('Assign role')
           );
           if (roleDropdown) {
             (roleDropdown as HTMLElement).click();
@@ -343,18 +351,32 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
         console.log('Clicked role dropdown');
         
         // Wait for dropdown options to appear
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log('Waiting for role options to load...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
         
         // Select "Nhà thiết kế thương hiệu của đội" role
         console.log('Selecting brand designer role...');
         await page.evaluate(() => {
           const roleOptions = Array.from(document.querySelectorAll('button'));
-          const brandDesignerOption = roleOptions.find(btn => 
-            btn.textContent?.includes('Nhà thiết kế thương hiệu của đội') ||
-            btn.textContent?.includes('Brand designer')
-          );
+          const brandDesignerOption = roleOptions.find(btn => {
+            // Tìm trong nội dung text trực tiếp của button
+            const directText = btn.textContent?.includes('Nhà thiết kế thương hiệu của đội') ||
+                             btn.textContent?.includes('Team brand designer');
+            
+            // Tìm trong phần tử p bên trong button
+            const paragraphText = Array.from(btn.querySelectorAll('p')).some(p => 
+              p.textContent?.includes('Nhà thiết kế thương hiệu của đội') ||
+              p.textContent?.includes('Team brand designer')
+            );
+            
+            return directText || paragraphText;
+          });
+          
           if (brandDesignerOption) {
+            console.log('Found brand designer option, clicking...');
             (brandDesignerOption as HTMLElement).click();
+          } else {
+            console.log('Could not find brand designer option');
           }
         });
         console.log('Selected brand designer role');
@@ -459,12 +481,12 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
         }
 
       } catch (error) {
-        if (error instanceof Error && error.message === 'Process timeout after 5 minutes') {
-          console.log('Process timed out, closing browser...');
-          await browser.close();
-          currentBrowser = null;
-          throw error;
-        }
+              if (error instanceof Error && error.message.includes('Process timeout')) {
+        console.log('Process timed out, closing browser...');
+        await browser.close();
+        currentBrowser = null;
+        throw error;
+      }
         console.log(`Error in invitation process on try ${retryCount}:`, error);
         if (retryCount === maxRetries) {
           throw error;
@@ -546,21 +568,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Clear any stale locks before checking
-    await clearStaleLock();
+    const wasLockCleared = await clearStaleLock();
 
     // Check if transfer is already in progress
     if (isTransferInProgress) {
-      return NextResponse.json({
-        status: 'error',
-        code: 'TRANSFER_IN_PROGRESS',
-        message: `Hệ thống đang xử lý chuyển team cho email khác. Vui lòng thử lại sau.`
-      });
+      // Double check if the lock is stale
+      if (!wasLockCleared) {
+        return NextResponse.json({
+          status: 'error',
+          code: 'TRANSFER_IN_PROGRESS',
+          message: `Hệ thống đang xử lý chuyển team cho email khác. Vui lòng thử lại sau.`
+        });
+      }
     }
 
     // Set lock
     isTransferInProgress = true;
     currentTransferEmail = email;
     transferStartTime = Date.now();
+    
+    // Log lock status
+    console.log(`Lock acquired for email: ${email} at ${new Date(transferStartTime).toISOString()}`);
 
     try {
       // Lấy thông tin tài khoản mới nhất
@@ -640,10 +668,16 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      return NextResponse.json({ 
-        status: 'error',
-        message: error instanceof Error ? error.message : 'Có lỗi xảy ra trong quá trình chuyển team'
-      });
+      // Nếu không phải lỗi timeout, tiếp tục quá trình
+      if (error instanceof Error && !error.message.includes('Process timeout')) {
+        return NextResponse.json({ 
+          status: 'error',
+          message: error.message || 'Có lỗi xảy ra trong quá trình chuyển team'
+        });
+      } else {
+        // Nếu là lỗi khác, throw để outer catch block xử lý
+        throw error;
+      }
     }
 
   } catch (error) {
@@ -653,6 +687,16 @@ export async function POST(request: NextRequest) {
     transferStartTime = null;
 
     console.error('API error:', error);
+    
+    // Kiểm tra nếu là lỗi timeout
+    if (error instanceof Error && error.message.includes('Process timeout')) {
+      return NextResponse.json({ 
+        status: 'error',
+        code: 'TIMEOUT',
+        message: 'Quá trình chuyển team đã vượt quá thời gian cho phép (10 phút). Vui lòng thử lại sau.'
+      });
+    }
+    
     return NextResponse.json({ 
       status: 'error',
       message: error instanceof Error ? error.message : 'Có lỗi xảy ra trong quá trình chuyển team'
