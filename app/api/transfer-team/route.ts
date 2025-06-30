@@ -8,14 +8,23 @@ import { getCanvaVerificationCode } from '@/app/utils/gmail';
 let isTransferInProgress = false;
 let currentTransferEmail: string | null = null;
 let transferStartTime: number | null = null;
+let currentBrowser: any = null;
 
 // Function to check and clear stale lock (if process has been running for more than 5 minutes)
-function clearStaleLock() {
-  if (isTransferInProgress && transferStartTime && (Date.now() - transferStartTime > 5 * 60 * 1000)) {
+async function clearStaleLock() {
+  if (isTransferInProgress && transferStartTime && (Date.now() - transferStartTime > 10 * 60 * 1000)) {
     isTransferInProgress = false;
     currentTransferEmail = null;
     transferStartTime = null;
-    console.log('Cleared stale lock');
+    if (currentBrowser) {
+      try {
+        await currentBrowser.close();
+      } catch (error) {
+        console.error('Error closing browser:', error);
+      }
+      currentBrowser = null;
+    }
+    console.log('Cleared stale lock and closed browser');
   }
 }
 
@@ -90,9 +99,19 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     ]
   });
 
+  // Store browser instance globally
+  currentBrowser = browser;
+
   try {
     const page = await browser.newPage();
     
+    // Add timeout check function
+    const checkTimeout = () => {
+      if (transferStartTime && (Date.now() - transferStartTime > 10 * 60 * 1000)) {
+        throw new Error('Process timeout after 10 minutes');
+      }
+    };
+
     // Basic stealth setup
     await page.evaluateOnNewDocument(() => {
       Object.defineProperty(navigator, 'webdriver', {
@@ -103,6 +122,8 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     
+    // Add timeout checks before major operations
+    checkTimeout();
     console.log('Navigating to Canva login...');
     await page.goto('https://www.canva.com/login', { 
       waitUntil: 'networkidle2', 
@@ -264,7 +285,8 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
       console.log('No verification code required');
     }
     
-    // Navigate to People page
+    // Add timeout checks before major operations throughout the function
+    checkTimeout();
     console.log('Navigating to People settings page...');
     await page.goto('https://www.canva.com/settings/people', { 
       waitUntil: 'domcontentloaded', 
@@ -280,6 +302,8 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
 
     while (!inviteLink && retryCount < maxRetries) {
       try {
+        // Add timeout check at the start of each retry
+        checkTimeout();
         retryCount++;
         console.log(`Thử lần ${retryCount} để mời người dùng...`);
 
@@ -435,12 +459,20 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
         }
 
       } catch (error) {
+        if (error instanceof Error && error.message === 'Process timeout after 5 minutes') {
+          console.log('Process timed out, closing browser...');
+          await browser.close();
+          currentBrowser = null;
+          throw error;
+        }
         console.log(`Error in invitation process on try ${retryCount}:`, error);
         if (retryCount === maxRetries) {
           throw error;
         }
         // Đợi một chút trước khi thử lại
         await new Promise(resolve => setTimeout(resolve, 5000));
+        // Add timeout check before retry
+        checkTimeout();
         // Refresh trang để thử lại
         await page.reload({ waitUntil: 'networkidle2' });
         await new Promise(resolve => setTimeout(resolve, 5000));
@@ -448,11 +480,13 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
     }
 
     await browser.close();
+    currentBrowser = null;
     return inviteLink;
 
   } catch (error) {
     console.error('Automation error:', error);
     await browser.close();
+    currentBrowser = null;
     throw error;
   }
 }
@@ -512,16 +546,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Clear any stale locks before checking
-    clearStaleLock();
+    await clearStaleLock();
 
     // Check if transfer is already in progress
     if (isTransferInProgress) {
       return NextResponse.json({
         status: 'error',
         code: 'TRANSFER_IN_PROGRESS',
-        // message: `Hệ thống đang xử lý chuyển team cho email ${currentTransferEmail}. Vui lòng thử lại sau.`
         message: `Hệ thống đang xử lý chuyển team cho email khác. Vui lòng thử lại sau.`
-
       });
     }
 
@@ -598,6 +630,16 @@ export async function POST(request: NextRequest) {
       transferStartTime = null;
 
       console.error('API error:', error);
+      
+      // Handle timeout error specifically
+      if (error instanceof Error && error.message === 'Process timeout after 10 minutes') {
+        return NextResponse.json({ 
+          status: 'error',
+          code: 'TIMEOUT',
+          message: 'Quá trình chuyển team đã vượt quá thời gian cho phép (10 phút). Vui lòng thử lại sau.'
+        });
+      }
+
       return NextResponse.json({ 
         status: 'error',
         message: error instanceof Error ? error.message : 'Có lỗi xảy ra trong quá trình chuyển team'
