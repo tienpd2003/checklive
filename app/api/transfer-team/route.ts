@@ -252,7 +252,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
         console.log('⚠️ Verification code required! Attempting to get code from email...');
         
         // Đợi 5 giây để email được gửi đến
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        await new Promise(resolve => setTimeout(resolve, 8000));
         
         // Thử lấy mã xác thực từ email
         let verificationCode = null;
@@ -395,7 +395,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
         }
         
         // Wait before clicking confirm
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Click Confirm and Invite button
         console.log('Looking for confirm button...');
