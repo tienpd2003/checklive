@@ -425,7 +425,7 @@ async function automateTeamTransfer(email: string, credentials: { account: strin
             const rows = Array.from(document.querySelectorAll('tr, div[role="row"]'));
             for (const row of rows) {
               // Kiểm tra nếu row chứa email cần tìm
-              if (row.textContent?.includes(emailToFind)) {
+              if (row.textContent?.toLowerCase().includes(emailToFind.toLowerCase())) {
                 // Tìm nút copy trong cùng row
                 const copyButton = row.querySelector('button[aria-label*="Sao chép liên kết duy nhất"], button[aria-label*="Copy unique link"]');
                 if (copyButton) {
